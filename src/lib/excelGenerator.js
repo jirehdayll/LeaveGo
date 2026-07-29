@@ -75,6 +75,10 @@ function styleRange(worksheet, startRow, startCol, endRow, endCol, style) {
 }
 
 export const generateMonthlySummaryExcel = async (monthForms, month, year, allApprovedForms = monthForms) => {
+  console.log('Excel Generator - Input data:', monthForms);
+  console.log('Excel Generator - Month:', month, 'Year:', year);
+  console.log('Excel Generator - All approved forms:', allApprovedForms);
+  
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Attendance Report');
 
@@ -88,8 +92,37 @@ export const generateMonthlySummaryExcel = async (monthForms, month, year, allAp
   const mIdx = MONTH_NAMES.indexOf(month.toLowerCase());
   const targetYear = parseInt(year, 10);
 
-  monthForms.forEach((req) => {
-    const name = req.user_name || 'Unknown';
+  console.log('Excel Generator - Processing data, mIdx:', mIdx, 'targetYear:', targetYear);
+
+  // Filter data to only include forms for the specified month/year
+  const filteredData = monthForms.filter(f => {
+    const d = f.details || {};
+    const startStr = d.start_date || d.departure_date || f.submitted_at || f.created_at;
+    const endStr = d.end_date || d.arrival_date || f.submitted_at || f.created_at;
+    
+    if (!startStr || !endStr) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === mIdx && fb.getFullYear() === targetYear;
+    }
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === mIdx && fb.getFullYear() === targetYear;
+    }
+
+    const startOfMonth = new Date(targetYear, mIdx, 1);
+    const endOfMonth = new Date(targetYear, mIdx + 1, 0, 23, 59, 59, 999);
+    
+    return start <= endOfMonth && end >= startOfMonth;
+  });
+
+  console.log('Excel Generator - Filtered data:', filteredData);
+
+  filteredData.forEach((req) => {
+    const name = req.user_name || req.profiles?.full_name || req.details?.name || 'Unknown Employee';
     if (!employeeMap[name]) {
       employeeMap[name] = { name, leaves: [] };
     }
@@ -123,6 +156,8 @@ export const generateMonthlySummaryExcel = async (monthForms, month, year, allAp
       }
     }
   });
+
+  console.log('Excel Generator - Employee map after processing:', employeeMap);
 
   const sortedNames = Object.keys(employeeMap).sort((a, b) => a.localeCompare(b));
 

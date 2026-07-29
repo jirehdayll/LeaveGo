@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getAccountsSync, saveAccounts } from '../lib/accountStore';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, supabaseServiceRole } from '../lib/supabaseClient';
 import { POSITIONS, USER_ROLES, DEPARTMENTS, EMPLOYEE_TYPES } from '../constants';
 import AdminLayout from '../components/AdminLayout';
 import { userEmailService } from '../services/userEmailService';
@@ -16,7 +16,7 @@ function maskEmail(email) {
   if (!email || typeof email !== 'string') return '—';
   const [localPart, domain] = email.split('@');
   if (!localPart || !domain) return email;
-  
+
   // Show first 3 characters, mask the rest with asterisks
   const visibleChars = Math.min(3, localPart.length);
   const maskedPart = localPart.slice(0, visibleChars) + '*'.repeat(Math.max(3, localPart.length - visibleChars));
@@ -52,9 +52,8 @@ function ConfirmationModal({ title, message, confirmText, cancelText, onConfirm,
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-[fadeIn_0.2s_ease-out]">
         <div className="p-7 text-center">
-          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${
-            type === 'danger' ? 'bg-red-100' : 'bg-emerald-100'
-          }`}>
+          <div className={`w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4 ${type === 'danger' ? 'bg-red-100' : 'bg-emerald-100'
+            }`}>
             {type === 'danger' ? (
               <XCircle className="w-8 h-8 text-red-600" />
             ) : (
@@ -157,22 +156,20 @@ function DepartmentPositionManagementModal({ onClose }) {
           <div className="flex gap-2">
             <button
               onClick={() => setActiveTab('departments')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'departments'
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'departments'
                   ? 'bg-emerald-600 text-white'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+                }`}
             >
               <Building className="w-4 h-4" />
               Departments
             </button>
             <button
               onClick={() => setActiveTab('positions')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                activeTab === 'positions'
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${activeTab === 'positions'
                   ? 'bg-emerald-600 text-white'
                   : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-              }`}
+                }`}
             >
               <UserCog className="w-4 h-4" />
               Positions
@@ -286,9 +283,7 @@ function DepartmentPositionManagementModal({ onClose }) {
 function CreateAccountModal({ onClose, onSuccess }) {
   const { createAccount } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [error, setError]     = useState(null);
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
+  const [error, setError] = useState(null);
   const [customDepartments, setCustomDepartments] = useState(() => {
     const saved = localStorage.getItem('customDepartments');
     return saved ? JSON.parse(saved) : [];
@@ -298,47 +293,15 @@ function CreateAccountModal({ onClose, onSuccess }) {
     return saved ? JSON.parse(saved) : [];
   });
   const [formData, setFormData] = useState({
-    firstName: '', middleName: '', surname: '', email: '', position: POSITIONS[0] || '', role: USER_ROLES.EMPLOYEE, department: '', employeeType: EMPLOYEE_TYPES[0] || 'Regular'
+    firstName: '', middleName: '', surname: '', email: '', position: POSITIONS[0] || '', role: USER_ROLES.EMPLOYEE, department: '', employeeType: EMPLOYEE_TYPES[0] || 'Regular', password: '', confirmPassword: '', salary_range: ''
   });
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const allDepartments = [...new Set([...DEPARTMENTS, ...customDepartments])];
   const allPositions = [...new Set([...POSITIONS, ...customPositions])];
 
   const set = (k, v) => setFormData(p => ({ ...p, [k]: v }));
-
-  const handlePasswordReset = async () => {
-    if (!formData.email.trim()) {
-      setError('Email is required to send password reset.');
-      return;
-    }
-
-    setResetLoading(true);
-    setError(null);
-    setResetSuccess(false);
-
-    try {
-      const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${baseUrl}/password-reset`,
-      });
-
-      if (resetError) {
-        // Check if it's a development environment issue
-        if (resetError.message?.includes('Email') || resetError.message?.includes('SMTP')) {
-          setError('Password reset email could not be sent. Please ensure email service is configured in Supabase.');
-        } else {
-          setError(resetError.message || 'Failed to send password reset email.');
-        }
-      } else {
-        setResetSuccess(true);
-        setTimeout(() => setResetSuccess(false), 5000);
-      }
-    } catch (err) {
-      setError('Failed to send password reset email. Please check your Supabase email configuration.');
-    } finally {
-      setResetLoading(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -364,15 +327,31 @@ function CreateAccountModal({ onClose, onSuccess }) {
       return;
     }
 
+    // Validate password
+    if (!formData.password.trim()) {
+      setError('Password is required.');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError('Passwords do not match.');
+      setLoading(false);
+      return;
+    }
+
     try {
       const fullName = `${formData.firstName} ${formData.middleName} ${formData.surname}`.trim();
-      
-      // Generate temporary password
-      const tempPassword = Math.random().toString(36).slice(-8);
-      
+
       const result = createAccount(
         formData.email,
-        tempPassword,
+        formData.password,
         fullName,
         formData.role
       );
@@ -389,6 +368,7 @@ function CreateAccountModal({ onClose, onSuccess }) {
               position: formData.position,
               department: formData.department,
               employee_type: formData.employeeType,
+              salary_range: formData.salary_range,
               is_active: true,
               isActive: true,
               leave_balances: {
@@ -414,13 +394,10 @@ function CreateAccountModal({ onClose, onSuccess }) {
           formData.role
         );
 
-        // Send password reset email immediately after account creation
-        await handlePasswordReset();
-
         onSuccess();
         onClose();
         setFormData({
-          firstName: '', middleName: '', surname: '', email: '', position: POSITIONS[0] || '', role: USER_ROLES.EMPLOYEE, department: '', employeeType: EMPLOYEE_TYPES[0] || 'Regular'
+          firstName: '', middleName: '', surname: '', email: '', position: POSITIONS[0] || '', role: USER_ROLES.EMPLOYEE, department: '', employeeType: EMPLOYEE_TYPES[0] || 'Regular', password: '', confirmPassword: '', salary_range: ''
         });
       } else {
         setError(result.error);
@@ -438,9 +415,8 @@ function CreateAccountModal({ onClose, onSuccess }) {
         {/* Honeypot inputs to trap browser credential injection */}
         <input type="text" name="trap_username" style={{ display: 'none' }} tabIndex="-1" autoComplete="off" />
         <input type="password" name="trap_password" style={{ display: 'none' }} tabIndex="-1" autoComplete="off" />
-        
+
         {error && <ErrorBanner message={error} />}
-        {resetSuccess && <SuccessBanner message="Password reset email sent successfully." />}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <Field label="First Name">
             <input required className={inputCls} placeholder="Juan"
@@ -465,17 +441,48 @@ function CreateAccountModal({ onClose, onSuccess }) {
             <div className="flex-1">
               <p className="text-sm font-semibold text-blue-800 mb-1">Password Setup</p>
               <p className="text-xs text-blue-600 mb-3">
-                A password reset link will be sent to the user's email after account creation. They will set their own password securely.
+                Set the initial password for this account.
               </p>
-              <button
-                type="button"
-                onClick={handlePasswordReset}
-                disabled={resetLoading || !formData.email}
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                {resetLoading ? 'Sending...' : 'Send Password Reset Link'}
-              </button>
+              
+              <div className="space-y-3">
+                <div className="relative">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    required
+                    className={inputCls}
+                    placeholder="New Password"
+                    value={formData.password}
+                    onChange={e => set('password', e.target.value)}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                
+                <div className="relative">
+                  <input
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    required
+                    className={inputCls}
+                    placeholder="Confirm Password"
+                    value={formData.confirmPassword}
+                    onChange={e => set('confirmPassword', e.target.value)}
+                    autoComplete="new-password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                  >
+                    {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -496,6 +503,10 @@ function CreateAccountModal({ onClose, onSuccess }) {
               <option key={dept} value={dept}>{dept}</option>
             ))}
           </select>
+        </Field>
+        <Field label="Salary Range">
+          <input className={inputCls} placeholder="e.g., SG-15, Step 3"
+            value={formData.salary_range} onChange={e => set('salary_range', e.target.value)} autoComplete="off" />
         </Field>
         <Field label="Employee Type">
           <select className={inputCls} value={formData.employeeType}
@@ -522,12 +533,16 @@ function CreateAccountModal({ onClose, onSuccess }) {
 
 // ─── Edit Account Modal ───────────────────────────────────────────────────────
 function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState(null);
-  const [success, setSuccess]   = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [success, setSuccess] = useState(null);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [resetLoading, setResetLoading] = useState(false);
-  const [resetSuccess, setResetSuccess] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [customDepartments, setCustomDepartments] = useState(() => {
     const saved = localStorage.getItem('customDepartments');
     return saved ? JSON.parse(saved) : [];
@@ -550,42 +565,110 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
     position: account.position || POSITIONS[0] || '',
     department: account.department || '',
     employeeType: account.employee_type || EMPLOYEE_TYPES[0] || 'Regular',
+    salary_range: account.salary_range || '',
     is_active: account.is_active !== false && account.isActive !== false
   });
 
   const set = (k, v) => setFormData(p => ({ ...p, [k]: v }));
 
-  const handlePasswordReset = async () => {
-    if (!formData.email.trim()) {
-      setError('Email is required to send password reset.');
+  const handleDirectPasswordUpdate = async () => {
+    // Validation
+    if (!newPassword.trim()) {
+      setError('New password is required.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
-    setResetLoading(true);
+    setPasswordLoading(true);
     setError(null);
-    setResetSuccess(false);
+    setPasswordSuccess(false);
 
     try {
-      const baseUrl = import.meta.env.VITE_APP_URL || window.location.origin;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(formData.email, {
-        redirectTo: `${baseUrl}/password-reset`,
-      });
+      // Get the user's email from account data
+      const userEmail = account.email || account.denr_email;
+      if (!userEmail) {
+        setError('User email not found. Cannot update password.');
+        setPasswordLoading(false);
+        return;
+      }
 
-      if (resetError) {
-        // Check if it's a development environment issue
-        if (resetError.message?.includes('Email') || resetError.message?.includes('SMTP')) {
-          setError('Password reset email could not be sent. Please ensure email service is configured in Supabase.');
-        } else {
-          setError(resetError.message || 'Failed to send password reset email.');
+      // First, try to update in Supabase Auth if the user exists there
+      const { data: users, error: listError } = await supabaseServiceRole.auth.admin.listUsers();
+      
+      if (!listError) {
+        const authUser = users.users.find(u => u.email === userEmail);
+        
+        if (authUser) {
+          // User exists in Supabase Auth - update password there
+          const { error: updateError } = await supabaseServiceRole.auth.admin.updateUserById(
+            authUser.id,
+            { password: newPassword }
+          );
+
+          if (updateError) {
+            console.error('Password update error in Supabase Auth:', updateError);
+            // Fall through to update in app_accounts
+          } else {
+            // Successfully updated in Supabase Auth
+            // Also update localStorage with proper accountStore functions
+            const { getAccountsSync, saveAccounts } = await import('../lib/accountStore');
+            const existingAccounts = getAccountsSync();
+            const updatedAccounts = existingAccounts.map(acc => {
+              if (String(acc.id) === String(account.id)) {
+                return { ...acc, password: newPassword };
+              }
+              return acc;
+            });
+            saveAccounts(updatedAccounts);
+
+            setPasswordSuccess(true);
+            setNewPassword('');
+            setConfirmPassword('');
+            setTimeout(() => setPasswordSuccess(false), 5000);
+            setPasswordLoading(false);
+            return;
+          }
         }
+      }
+
+      // Update password in app_accounts table (this is the primary user store for this app)
+      const { error: dbError } = await supabase
+        .from('app_accounts')
+        .update({ password: newPassword, updated_at: new Date().toISOString() })
+        .eq('id', String(account.id));
+
+      if (dbError) {
+        console.error('Password update error in app_accounts:', dbError);
+        setError(dbError.message || 'Failed to update password in database.');
       } else {
-        setResetSuccess(true);
-        setTimeout(() => setResetSuccess(false), 5000);
+        // Also update localStorage with proper accountStore functions
+        const { getAccountsSync, saveAccounts } = await import('../lib/accountStore');
+        const existingAccounts = getAccountsSync();
+        const updatedAccounts = existingAccounts.map(acc => {
+          if (String(acc.id) === String(account.id)) {
+            return { ...acc, password: newPassword };
+          }
+          return acc;
+        });
+        saveAccounts(updatedAccounts);
+
+        setPasswordSuccess(true);
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setPasswordSuccess(false), 5000);
       }
     } catch (err) {
-      setError('Failed to send password reset email. Please check your Supabase email configuration.');
+      console.error('Password update error:', err);
+      setError('Failed to update password. Please check your Supabase configuration.');
     } finally {
-      setResetLoading(false);
+      setPasswordLoading(false);
     }
   };
 
@@ -606,11 +689,11 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
       // Update in localStorage
       const existingAccounts = JSON.parse(localStorage.getItem('userAccounts') || '[]');
       const fullName = `${formData.firstName} ${formData.middleName} ${formData.surname}`.trim();
-      
+
       console.log('Editing account with ID:', account.id);
       console.log('Existing accounts count:', existingAccounts.length);
       console.log('Form data:', formData);
-      
+
       const updatedAccounts = existingAccounts.map(acc => {
         console.log('Comparing account ID:', acc.id, 'with target ID:', account.id, 'Match:', acc.id === account.id, 'String match:', String(acc.id) === String(account.id));
         if (String(acc.id) === String(account.id)) {
@@ -623,6 +706,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
             position: formData.position,
             department: formData.department,
             employee_type: formData.employeeType,
+            salary_range: formData.salary_range,
             is_active: formData.is_active,
             isActive: formData.is_active
           };
@@ -631,42 +715,43 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
         }
         return acc;
       });
-      
+
       console.log('Updated accounts count:', updatedAccounts.length);
-      
+
       // Save to localStorage
       localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
       console.log('Saved to localStorage');
-      
+
       // Verify save
       const verifyAccounts = JSON.parse(localStorage.getItem('userAccounts') || '[]');
       const verifyAccount = verifyAccounts.find(a => String(a.id) === String(account.id));
       console.log('Verification - Account after save:', verifyAccount);
-      
+
       // Update database (Supabase) - atomic update of only organizational metadata
       const { error: dbError } = await supabase
         .from('app_accounts')
         .update({
           position: formData.position,
           department: formData.department,
+          salary_range: formData.salary_range,
           is_active: formData.is_active,
           updated_at: new Date().toISOString()
         })
         .eq('id', String(account.id));
-      
+
       if (dbError) {
         console.error('Database update error:', dbError);
         setError('Failed to sync with database. Changes saved locally.');
       } else {
         console.log('Database update successful');
       }
-      
+
       // Dispatch event to notify other components (Records, Dashboard) to refresh
       window.dispatchEvent(new CustomEvent('accountUpdated', { detail: { accountId: account.id } }));
-      
+
       // Show success popup
       setShowSuccessModal(true);
-      
+
       // Close modal after short delay
       setTimeout(() => {
         setShowSuccessModal(false);
@@ -684,8 +769,8 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
     <>
       <Modal title="Edit Account" subtitle={`Editing: ${account.full_name || account.denr_email}`} onClose={onClose}>
         <div className="p-7 space-y-5">
-          {error   && <ErrorBanner   message={error}   />}
-          {resetSuccess && <SuccessBanner message="Password reset email sent successfully." />}
+          {error && <ErrorBanner message={error} />}
+          {passwordSuccess && <SuccessBanner message="Password updated successfully. User can now log in with the new password." />}
 
           <form onSubmit={handleSave} className="space-y-4 overflow-visible">
             {/* Personal Identity Fields - Read Only */}
@@ -728,6 +813,10 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
                   ))}
                 </select>
               </Field>
+              <Field label="Salary Range">
+                <input className={inputCls} placeholder="e.g., SG-15, Step 3"
+                  value={formData.salary_range} onChange={e => set('salary_range', e.target.value)} />
+              </Field>
               <Field label="Employee Type">
                 <select className={inputCls} value={formData.employeeType}
                   onChange={e => set('employeeType', e.target.value)}>
@@ -738,28 +827,64 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
               </Field>
             </div>
 
-            {/* Password Reset Section */}
+            {/* Direct Password Override Section */}
             <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
               <div className="flex items-start gap-3">
                 <KeyRound className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
                 <div className="flex-1">
-                  <p className="text-sm font-semibold text-blue-800 mb-1">Password Management</p>
+                  <p className="text-sm font-semibold text-blue-800 mb-1">Direct Password Override</p>
                   <p className="text-xs text-blue-600 mb-3">
-                    Send a secure password reset link to the user's email. They will set their own password.
+                    Set a new password directly for this user. They can immediately log in with the new password.
                   </p>
-                  <button
-                    type="button"
-                    onClick={handlePasswordReset}
-                    disabled={resetLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {resetLoading ? 'Sending...' : 'Send Password Reset Link'}
-                  </button>
+                  <div className="space-y-3">
+                    <div className="relative">
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        placeholder="New Password"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-blue-200 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none bg-white"
+                        disabled={passwordLoading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        placeholder="Confirm Password"
+                        value={confirmPassword}
+                        onChange={(e) => setConfirmPassword(e.target.value)}
+                        className="w-full px-4 py-2.5 rounded-lg border border-blue-200 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none bg-white"
+                        disabled={passwordLoading}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                      >
+                        {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleDirectPasswordUpdate}
+                      disabled={passwordLoading}
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      {passwordLoading ? 'Updating...' : 'Save New Password'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
-            
+
             <SubmitButton loading={loading} label="Save Changes" loadingLabel="Saving…"
               icon={<Pencil className="w-4 h-4" />} />
           </form>
@@ -842,11 +967,11 @@ function SubmitButton({ loading, label, loadingLabel, icon }) {
 function AccountCard({ acc, isAdmin, onToggle, onEdit, onDelete }) {
   const [showConfirm, setShowConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+
   const displayName = acc.full_name || acc.name || acc.email || 'Unknown';
   const initial = displayName.charAt(0).toUpperCase();
-  
-  const accent = isAdmin 
+
+  const accent = isAdmin
     ? { bg: 'bg-purple-100', text: 'text-purple-700' }
     : { bg: 'bg-blue-100', text: 'text-blue-700' };
 
@@ -907,11 +1032,10 @@ function AccountCard({ acc, isAdmin, onToggle, onEdit, onDelete }) {
             </button>
             <button
               onClick={handleToggleClick}
-              className={`p-2 rounded-xl transition-all ${
-                active
+              className={`p-2 rounded-xl transition-all ${active
                   ? 'bg-amber-50 text-amber-600 hover:bg-amber-100'
                   : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'
-              }`}
+                }`}
               title={active ? 'Deactivate' : 'Activate'}
             >
               <Power className="w-4 h-4" />
@@ -929,11 +1053,10 @@ function AccountCard({ acc, isAdmin, onToggle, onEdit, onDelete }) {
             <span className="truncate">{acc.position || 'No position set'}</span>
           </div>
           <div>
-            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-bold ${
-              active
+            <span className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-bold ${active
                 ? 'bg-emerald-50 text-emerald-700 border border-emerald-100'
                 : 'bg-red-50 text-red-600 border border-red-100'
-            }`}>
+              }`}>
               <div className={`w-1.5 h-1.5 rounded-full ${active ? 'bg-emerald-500' : 'bg-red-500'}`} />
               {active ? 'Active' : 'Deactivated'}
             </span>
@@ -974,7 +1097,7 @@ function AccountCard({ acc, isAdmin, onToggle, onEdit, onDelete }) {
 function SectionHeader({ icon, label, count, color }) {
   const colors = {
     purple: 'text-purple-600 bg-purple-100 text-purple-700',
-    blue:   'text-blue-600 bg-blue-100 text-blue-700'
+    blue: 'text-blue-600 bg-blue-100 text-blue-700'
   };
   return (
     <div className="flex items-center gap-2 mb-4">
@@ -1002,7 +1125,7 @@ export default function AccountManagement() {
   const fetchAccounts = useCallback(() => {
     setLoading(true);
     setError(null);
-    
+
     try {
       const userAccounts = getAccounts();
       setAccounts(userAccounts);
@@ -1061,7 +1184,7 @@ export default function AccountManagement() {
   const handleDeleteAccount = (id) => {
     // Remove from list
     setAccounts(prev => prev.filter(a => a.id !== id));
-    
+
     // Remove from localStorage
     deleteAccount(id);
   };
@@ -1073,7 +1196,7 @@ export default function AccountManagement() {
     acc.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const admins    = filtered.filter(a => a.role === USER_ROLES.ADMIN || a.role === USER_ROLES.CENRO);
+  const admins = filtered.filter(a => a.role === USER_ROLES.ADMIN || a.role === USER_ROLES.CENRO);
   const employees = filtered.filter(a => a.role !== USER_ROLES.ADMIN && a.role !== USER_ROLES.CENRO);
 
   return (

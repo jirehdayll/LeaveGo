@@ -1,4 +1,4 @@
-import { supabase } from '../lib/supabaseClient';
+import { supabase, supabaseServiceRole } from '../lib/supabaseClient';
 
 export const leaveBalancesAPI = {
   // Initialize leave balance for a user
@@ -27,7 +27,7 @@ export const leaveBalancesAPI = {
     reason: string,
     adminEmail: string
   ) {
-    const { data, error } = await supabase.rpc('adjust_leave_balance', {
+    const { data, error } = await supabaseServiceRole.rpc('adjust_leave_balance', {
       p_user_id: userId,
       p_leave_type: leaveType,
       p_amount: amount,

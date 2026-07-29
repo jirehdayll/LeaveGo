@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import { APP_ROUTES } from '../constants';
 import { Lock, Eye, EyeOff, AlertCircle, CheckCircle2 } from 'lucide-react';
@@ -13,10 +13,18 @@ export default function ResetPassword() {
   const [ready, setReady] = useState(false);
   const [done, setDone] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   useEffect(() => {
     let cancelled = false;
+
+    // Extract email from URL parameters
+    const emailParam = searchParams.get('email');
+    if (emailParam) {
+      setUserEmail(emailParam);
+    }
 
     // Check session explicitly on mount
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
@@ -53,7 +61,7 @@ export default function ResetPassword() {
       clearTimeout(t);
       subscription.unsubscribe();
     };
-  }, []);
+  }, [searchParams]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -71,8 +79,26 @@ export default function ResetPassword() {
 
     setLoading(true);
     try {
+      // Update Supabase Auth password
       const { data, error: upErr } = await supabase.auth.updateUser({ password: password });
       if (upErr) throw upErr;
+
+      // Also update the local app_accounts password for login authentication
+      const { getAccountsSync, saveAccounts } = await import('../lib/accountStore');
+      const existingAccounts = getAccountsSync();
+      
+      // Get the email to update - prioritize URL email parameter, then Supabase auth email
+      const emailToUpdate = userEmail || (await supabase.auth.getUser()).data.user?.email;
+      
+      if (emailToUpdate) {
+        const updatedAccounts = existingAccounts.map(acc => {
+          if (acc.email.toLowerCase() === emailToUpdate.toLowerCase()) {
+            return { ...acc, password: password };
+          }
+          return acc;
+        });
+        saveAccounts(updatedAccounts);
+      }
       
       setDone(true);
       await supabase.auth.signOut();
@@ -132,6 +158,13 @@ export default function ResetPassword() {
           </span>
           <h2 className="text-3xl font-black text-slate-800 tracking-tight">Make a New Password</h2>
           <p className="mt-1.5 text-slate-500 text-sm">Please enter and reconfirm your new password below.</p>
+          {userEmail && (
+            <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-xl">
+              <p className="text-xs text-blue-700">
+                <strong>Account:</strong> {userEmail}
+              </p>
+            </div>
+          )}
         </div>
 
         {error && (

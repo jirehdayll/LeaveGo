@@ -4,7 +4,6 @@ import { useAuth } from './hooks/useAuth';
 
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
-import PasswordReset from './pages/PasswordReset';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import LeaveForm from './pages/LeaveForm';
 import TravelForm from './pages/TravelForm';
@@ -86,9 +85,6 @@ function App() {
 
           {/* Password recovery from email (public) */}
           <Route path={APP_ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
-          
-          {/* Dedicated password reset page (public) */}
-          <Route path={APP_ROUTES.PASSWORD_RESET} element={<PasswordReset />} />
 
           {/* Employee Routes - Protected */}
           <Route path="/dashboard" element={<ProtectedRoute><EmployeeDashboard /></ProtectedRoute>} />

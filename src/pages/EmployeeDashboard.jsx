@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { supabase } from '../lib/supabaseClient';
+import { supabase, supabaseServiceRole } from '../lib/supabaseClient';
 import { leaveRequestsAPI } from '../api/leaveRequests';
 import { useAuth } from '../hooks/useAuth';
 import {
@@ -13,13 +13,15 @@ import {
 import {
   Clock, CheckCircle2, Plane, FileText,
   Eye, Check, X, LogOut, User, Calendar, MapPin, Search, ChevronDown, UserCircle,
-  TrendingUp, AlertCircle, BarChart3, Activity, QrCode, KeyRound, Eye as EyeIcon, EyeOff, RefreshCw
+  TrendingUp, AlertCircle, BarChart3, Activity, QrCode, KeyRound, Eye as EyeIcon, EyeOff, RefreshCw, Download, FileSpreadsheet, Send, Loader2
 } from 'lucide-react';
 import { getAccountsSync, syncAccount } from '../lib/accountStore';
 import { MONTHS, REQUEST_STATUS, STATUS_COLORS, REQUEST_TYPES } from '../constants';
 
 import { QRCodeSVG } from 'qrcode.react';
 import { getAllDepartments, getAllPositions } from '../utils/departmentsPositions';
+import { generateApplicationPDF } from '../lib/applicationPDF';
+import { generateApplicationWord } from '../lib/applicationWord';
 
 function StatCard({ icon: Icon, label, value, color, bg, trend, trendValue }) {
   return (
@@ -43,8 +45,26 @@ function StatCard({ icon: Icon, label, value, color, bg, trend, trendValue }) {
   );
 }
 
-function RequestCard({ request, onView, isRecent = false, isNewlyApproved = false }) {
+function RequestCard({ request, onView, isRecent = false, isNewlyApproved = false, getAccounts }) {
   const isLeave = request.request_type === REQUEST_TYPES.LEAVE;
+  const [downloading, setDownloading] = React.useState(null);
+
+  const handleDownload = async (type) => {
+    try {
+      setDownloading(type);
+      if (type === 'pdf') {
+        await generateApplicationPDF(request);
+      } else if (type === 'word') {
+        // Use the same data preparation as PDF for consistency
+        await generateApplicationWord(request, getAccounts ? getAccounts() : []);
+      }
+    } catch (error) {
+      console.error('Error downloading application:', error);
+      alert('Failed to download application. Please try again.');
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   return (
     <div 
@@ -108,6 +128,38 @@ function RequestCard({ request, onView, isRecent = false, isNewlyApproved = fals
               year: 'numeric'
             })}
           </p>
+          <div className="flex gap-1 mt-2 justify-end">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload('pdf');
+              }}
+              disabled={downloading === 'pdf'}
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors disabled:opacity-50"
+              title="Download PDF"
+            >
+              {downloading === 'pdf' ? (
+                <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <Download className="w-3 h-3" />
+              )}
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleDownload('word');
+              }}
+              disabled={downloading === 'word'}
+              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors disabled:opacity-50"
+              title="Download Word"
+            >
+              {downloading === 'word' ? (
+                <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <FileSpreadsheet className="w-3 h-3" />
+              )}
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -116,7 +168,7 @@ function RequestCard({ request, onView, isRecent = false, isNewlyApproved = fals
 
 export default function EmployeeDashboard() {
   const navigate = useNavigate();
-  const { user, profile, logout } = useAuth();
+  const { user, profile, logout, getAccounts } = useAuth();
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showLeaveBalanceModal, setShowLeaveBalanceModal] = useState(false);
   const [requests, setRequests] = useState([]);
@@ -489,6 +541,7 @@ export default function EmployeeDashboard() {
                     key={request.id}
                     request={request}
                     onView={handleViewRequest}
+                    getAccounts={getAccounts}
                   />
                 ))
               )}
@@ -686,9 +739,12 @@ function ProfileModal({ user, onClose }) {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState('');
-  const [showPasswordSection, setShowPasswordSection] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
+  const [passwordLoading, setPasswordLoading] = useState(false);
+  const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     // Load from accountStore (localStorage + Supabase cache)
@@ -719,19 +775,120 @@ function ProfileModal({ user, onClose }) {
     setAccount(prev => ({ ...prev, [name]: value }));
   };
 
+  const handlePasswordUpdate = async () => {
+    // Validation
+    if (!newPassword.trim()) {
+      setSaveError('New password is required.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setSaveError('Password must be at least 6 characters long.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setSaveError('Passwords do not match.');
+      return;
+    }
+
+    setPasswordLoading(true);
+    setSaveError('');
+    setPasswordSuccess(false);
+
+    try {
+      // Get the user's email from account data
+      const userEmail = account.email;
+      if (!userEmail) {
+        setSaveError('User email not found. Cannot update password.');
+        setPasswordLoading(false);
+        return;
+      }
+
+      // First, try to update in Supabase Auth if the user exists there
+      const { data: users, error: listError } = await supabaseServiceRole.auth.admin.listUsers();
+      
+      if (!listError) {
+        const authUser = users.users.find(u => u.email === userEmail);
+        
+        if (authUser) {
+          // User exists in Supabase Auth - update password there
+          const { error: updateError } = await supabaseServiceRole.auth.admin.updateUserById(
+            authUser.id,
+            { password: newPassword }
+          );
+
+          if (updateError) {
+            console.error('Password update error in Supabase Auth:', updateError);
+            // Fall through to update in app_accounts
+          } else {
+            // Successfully updated in Supabase Auth
+            // Also update localStorage with proper accountStore functions
+            const { getAccountsSync, saveAccounts } = await import('../lib/accountStore');
+            const existingAccounts = getAccountsSync();
+            const updatedAccounts = existingAccounts.map(acc => {
+              if (String(acc.id) === String(account.id)) {
+                return { ...acc, password: newPassword };
+              }
+              return acc;
+            });
+            saveAccounts(updatedAccounts);
+
+            setPasswordSuccess(true);
+            setNewPassword('');
+            setConfirmPassword('');
+            setTimeout(() => setPasswordSuccess(false), 5000);
+            setPasswordLoading(false);
+            return;
+          }
+        }
+      }
+
+      // Update password in app_accounts table (this is the primary user store for this app)
+      const { error: dbError } = await supabase
+        .from('app_accounts')
+        .update({ password: newPassword, updated_at: new Date().toISOString() })
+        .eq('id', String(account.id));
+
+      if (dbError) {
+        console.error('Password update error in app_accounts:', dbError);
+        setSaveError(dbError.message || 'Failed to update password in database.');
+      } else {
+        // Also update localStorage with the same key format used by accountStore
+        const { getAccountsSync, saveAccounts } = await import('../lib/accountStore');
+        const existingAccounts = getAccountsSync();
+        const updatedAccounts = existingAccounts.map(acc => {
+          if (String(acc.id) === String(account.id)) {
+            return { ...acc, password: newPassword };
+          }
+          return acc;
+        });
+        saveAccounts(updatedAccounts);
+
+        setPasswordSuccess(true);
+        setNewPassword('');
+        setConfirmPassword('');
+        setTimeout(() => setPasswordSuccess(false), 5000);
+      }
+    } catch (err) {
+      console.error('Password update error:', err);
+      setSaveError('Failed to update password. Please check your Supabase configuration.');
+    } finally {
+      setPasswordLoading(false);
+    }
+  };
+
   const handleSave = async (e) => {
     e.preventDefault();
     setSaving(true);
     setSaveError('');
     setSaveSuccess(false);
     try {
-      // Only update organizational metadata (department, position) - names are read-only
+      // Only update organizational metadata (department, position, salary_range) - names are read-only
       const updatedAccount = {
         ...account,
-        // Only update department and position
+        // Only update department, position, and salary_range
         department: account.department,
         position: account.position,
-        ...(showPasswordSection && newPassword ? { password: newPassword } : {})
+        salary_range: account.salary_range,
       };
 
       // Update database directly with atomic operation
@@ -741,6 +898,7 @@ function ProfileModal({ user, onClose }) {
         .update({
           department: updatedAccount.department,
           position: updatedAccount.position,
+          salary_range: updatedAccount.salary_range,
           updated_at: new Date().toISOString()
         })
         .eq('id', user.id);
@@ -904,48 +1062,83 @@ function ProfileModal({ user, onClose }) {
                     {getAllPositions().map(p => <option key={p} value={p}>{p}</option>)}
                   </select>
                 </div>
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">Salary Range</label>
+                  <input
+                    type="text"
+                    name="salary_range"
+                    value={account.salary_range || ''}
+                    onChange={handleChange}
+                    placeholder="e.g., SG-15, Step 3"
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-400 focus:outline-none transition"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Salary Range removed from profile (kept as hidden field) */}
-            <div style={{display:'none'}}>
-              <input type="hidden" name="salary_range" value={account.salary_range || ''} />
-            </div>
-
-            {/* Password Reset Section */}
+            {/* Password Update Section */}
             <div className="border-t border-slate-100 pt-4">
-              <button
-                type="button"
-                onClick={() => { setShowPasswordSection(v => !v); setNewPassword(''); }}
-                className="flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-700 transition-colors mb-3"
-              >
-                <KeyRound className="w-4 h-4" />
-                {showPasswordSection ? 'Cancel Password Change' : 'Change Password'}
-              </button>
-              {showPasswordSection && (
-                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">New Password</label>
-                  <div className="relative">
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      value={newPassword}
-                      onChange={e => setNewPassword(e.target.value)}
-                      autoComplete="new-password"
-                      placeholder="Min. 6 characters"
-                      minLength={6}
-                      className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none pr-12 bg-white transition"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(v => !v)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
-                    >
-                      {showPassword ? <EyeOff className="w-4 h-4" /> : <EyeIcon className="w-4 h-4" />}
-                    </button>
+              <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                <div className="flex items-start gap-3">
+                  <KeyRound className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-blue-800 mb-1">Password Management</p>
+                    <p className="text-xs text-blue-600 mb-3">
+                      Update your password directly.
+                    </p>
+                    
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <input
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="New Password"
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      
+                      <div className="relative">
+                        <input
+                          type={showConfirmPassword ? 'text' : 'password'}
+                          placeholder="Confirm Password"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-lg border border-slate-200 text-sm focus:ring-2 focus:ring-blue-400 focus:outline-none pr-10"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                        >
+                          {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      
+                      <button
+                        type="button"
+                        onClick={handlePasswordUpdate}
+                        disabled={passwordLoading}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {passwordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                        {passwordLoading ? 'Updating...' : 'Update Password'}
+                      </button>
+                      
+                      {passwordSuccess && (
+                        <p className="text-xs text-emerald-600 mt-2">Password updated successfully!</p>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-xs text-slate-500 mt-1.5">Leave blank to keep your current password.</p>
                 </div>
-              )}
+              </div>
             </div>
           </form>
         </div>
