@@ -42,7 +42,7 @@ export const authAPI = {
     return handleApiCall(async () => {
       const baseUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${baseUrl}/password-reset`,
+        redirectTo: `${baseUrl}/reset-password`,
       });
       if (error) throw error;
     }, 'authAPI.resetPassword');
@@ -70,7 +70,7 @@ export const authAPI = {
     return handleApiCall(async () => {
       const baseUrl = import.meta.env.VITE_APP_URL || (typeof window !== 'undefined' ? window.location.origin : '');
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${baseUrl}/password-reset`,
+        redirectTo: `${baseUrl}/reset-password`,
       });
       if (error) throw error;
     }, 'authAPI.sendPasswordRecoveryEmail');

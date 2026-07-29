@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import { supabase } from '../lib/supabaseClient';
 import { Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle2, X, AlertTriangle, FileText } from 'lucide-react';
 
 // Terms and Conditions Modal
@@ -80,6 +81,7 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [showDeactivatedModal, setShowDeactivatedModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const navigate = useNavigate();
@@ -227,7 +229,35 @@ export default function Login() {
               </div>
             </div>
 
-            
+            <div className="flex justify-end">
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!email) {
+                    setError('Please enter your email address first.');
+                    return;
+                  }
+                  try {
+                    setResetLoading(true);
+                    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                      redirectTo: `${window.location.origin}/reset-password?email=${encodeURIComponent(email)}`,
+                    });
+                    if (error) throw error;
+                    setError(null);
+                    alert('Password reset email sent! Check your inbox for instructions.');
+                  } catch (err) {
+                    setError(err.message || 'Failed to send reset email. Please try again.');
+                  } finally {
+                    setResetLoading(false);
+                  }
+                }}
+                disabled={resetLoading}
+                className="text-sm font-semibold text-emerald-600 hover:text-emerald-700 transition-colors disabled:opacity-50"
+              >
+                {resetLoading ? 'Sending...' : 'Forgot Password?'}
+              </button>
+            </div>
+
             <button
               type="submit"
               disabled={loading}

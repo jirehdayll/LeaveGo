@@ -22,6 +22,10 @@ function getLeaveCellValue(type, controlNumber) {
 }
 
 export const generateMonthlySummaryPDF = async (data, month, year, allApprovedForms = data) => {
+  console.log('PDF Generator - Input data:', data);
+  console.log('PDF Generator - Month:', month, 'Year:', year);
+  console.log('PDF Generator - All approved forms:', allApprovedForms);
+  
   const pdf = new jsPDF('landscape', 'pt', 'legal');
 
   const currentDate = new Date();
@@ -40,8 +44,37 @@ export const generateMonthlySummaryPDF = async (data, month, year, allApprovedFo
   const monthIdx = monthNames.indexOf(reportMonth.toLowerCase());
   const targetYear = parseInt(reportYear, 10);
 
-  data.forEach((req) => {
-    const name = req.user_name || 'Unknown';
+  console.log('PDF Generator - Processing data, monthIdx:', monthIdx, 'targetYear:', targetYear);
+
+  // Filter data to only include forms for the specified month/year
+  const filteredData = data.filter(f => {
+    const d = f.details || {};
+    const startStr = d.start_date || d.departure_date || f.submitted_at || f.created_at;
+    const endStr = d.end_date || d.arrival_date || f.submitted_at || f.created_at;
+    
+    if (!startStr || !endStr) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === monthIdx && fb.getFullYear() === targetYear;
+    }
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === monthIdx && fb.getFullYear() === targetYear;
+    }
+
+    const startOfMonth = new Date(targetYear, monthIdx, 1);
+    const endOfMonth = new Date(targetYear, monthIdx + 1, 0, 23, 59, 59, 999);
+    
+    return start <= endOfMonth && end >= startOfMonth;
+  });
+
+  console.log('PDF Generator - Filtered data:', filteredData);
+
+  filteredData.forEach((req) => {
+    const name = req.user_name || req.profiles?.full_name || req.details?.name || 'Unknown Employee';
     if (!employeeMap[name]) {
       employeeMap[name] = { name, leaves: {} };
     }
@@ -68,6 +101,8 @@ export const generateMonthlySummaryPDF = async (data, month, year, allApprovedFo
       }
     }
   });
+
+  console.log('PDF Generator - Employee map after processing:', employeeMap);
 
   const sortedNames = Object.keys(employeeMap).sort((a, b) => a.localeCompare(b));
   const tableRows = [];

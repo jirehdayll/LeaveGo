@@ -1,0 +1,403 @@
+import jsPDF from 'jspdf';
+
+const DENR_LOGO_PATH = '/denr-logo.png';
+
+function loadImageAsDataUrl(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width;
+      canvas.height = img.naturalHeight || img.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        reject(new Error('Canvas not supported'));
+        return;
+      }
+      ctx.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error(`Failed to load image: ${src}`));
+    img.src = src;
+  });
+}
+
+async function addDenrLogo(doc, x, y, sizeMm = 22) {
+  try {
+    const dataUrl = await loadImageAsDataUrl(DENR_LOGO_PATH);
+    doc.addImage(dataUrl, 'PNG', x, y, sizeMm, sizeMm);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function drawControlNumberStamp(doc, W, controlNumber) {
+  if (!controlNumber) return;
+  doc.setFillColor(255, 238, 0);
+  doc.rect(W - 45, 8, 30, 10, 'F');
+  doc.setDrawColor(0, 0, 0);
+  doc.rect(W - 45, 8, 30, 10);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(String(controlNumber), W - 30, 14.5, { align: 'center' });
+}
+
+function parseEmployeeName(data) {
+  if (data.surname || data.first_name) {
+    return {
+      lastName: data.surname || '',
+      firstName: data.first_name || '',
+      middleName: data.middle_name || '',
+    };
+  }
+  const nameParts = (data.full_name || '').trim().split(/\s+/).filter(Boolean);
+  if (nameParts.length === 0) return { lastName: '', firstName: '', middleName: '' };
+  if (nameParts.length === 1) return { lastName: '', firstName: nameParts[0], middleName: '' };
+  if (nameParts.length === 2) {
+    return { firstName: nameParts[0], middleName: '', lastName: nameParts[1] };
+  }
+  return {
+    firstName: nameParts[0],
+    middleName: nameParts.slice(1, -1).join(' '),
+    lastName: nameParts[nameParts.length - 1],
+  };
+}
+
+/**
+ * Renders a Leave Application PDF matching CSF No. 6 format (Civil Service Form No. 6).
+ */
+export async function renderLeaveApplicationPDF(doc, data) {
+  const W = 210;
+  const controlNumber = data.control_number || data.travel_no || '';
+  const department = data.department || data.office_department || '';
+  const { lastName, firstName, middleName } = parseEmployeeName(data);
+
+  await addDenrLogo(doc, 12, 6, 24);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Civil Service Form No. 6', 40, 8);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Revised 2020', 40, 11.5);
+
+  drawControlNumberStamp(doc, W, controlNumber);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Republic of the Philippines', W / 2, 10, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text('Department of Environment and Natural Resources', W / 2, 14.5, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text('PROVINCIAL ENVIRONMENT AND NATURAL RESOURCES OFFICE', W / 2, 19, { align: 'center' });
+  doc.setTextColor(0, 0, 0);
+  doc.text('REGION III, Iba, Zambales', W / 2, 23.5, { align: 'center' });
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(15);
+  doc.setTextColor(0, 0, 0);
+  doc.text('APPLICATION FOR LEAVE', W / 2, 33, { align: 'center' });
+
+  const left = 15;
+  const right = W - 15;
+  const tableW = right - left;
+  let y = 38;
+
+  const drawRect = (x, yy, w, h) => doc.rect(x, yy, w, h);
+  const cellText = (text, x, yy, opts = {}) => {
+    doc.setFont('helvetica', opts.bold ? 'bold' : 'normal');
+    doc.setFontSize(opts.size || 8);
+    doc.setTextColor(0, 0, 0);
+    doc.text(text, x, yy, opts);
+  };
+
+  const row1H = 10;
+  drawRect(left, y, tableW * 0.3, row1H);
+  drawRect(left + tableW * 0.3, y, tableW * 0.7, row1H);
+  cellText('1. OFFICE/DEPARTMENT', left + 1, y + 4, { size: 7 });
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(department, left + 3, y + 8);
+  cellText('2. NAME :', left + tableW * 0.3 + 2, y + 4, { size: 7 });
+  cellText('(Last)', left + tableW * 0.3 + 25, y + 4, { size: 6.5 });
+  cellText('(First)', left + tableW * 0.55, y + 4, { size: 6.5 });
+  cellText('(Middle)', left + tableW * 0.75, y + 4, { size: 6.5 });
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(lastName, left + tableW * 0.3 + 25, y + 8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(firstName, left + tableW * 0.55, y + 8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(middleName, left + tableW * 0.75, y + 8);
+  y += row1H;
+
+  const row2H = 10;
+  drawRect(left, y, tableW * 0.25, row2H);
+  drawRect(left + tableW * 0.25, y, tableW * 0.35, row2H);
+  drawRect(left + tableW * 0.6, y, tableW * 0.4, row2H);
+  cellText('3. DATE OF FILING', left + 1, y + 4, { size: 7 });
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(data.date_of_filing || new Date().toLocaleDateString(), left + 3, y + 8);
+  cellText('4. POSITION', left + tableW * 0.25 + 2, y + 4, { size: 7 });
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(data.position || '', left + tableW * 0.25 + 3, y + 8);
+  cellText('5. SALARY', left + tableW * 0.6 + 2, y + 4, { size: 7 });
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  const salaryDisplay = data.salary ? (String(data.salary).startsWith('₱') ? data.salary : `₱ ${data.salary}`) : '';
+  doc.text(salaryDisplay, left + tableW * 0.6 + 20, y + 8);
+  y += row2H;
+
+  const secH = 7;
+  drawRect(left, y, tableW, secH);
+  doc.setFillColor(220, 220, 220);
+  doc.rect(left, y, tableW, secH, 'F');
+  doc.setDrawColor(0);
+  doc.rect(left, y, tableW, secH);
+  cellText('6. DETAILS OF APPLICATION', W / 2, y + 5, { align: 'center', bold: true, size: 8.5 });
+  y += secH;
+
+  const col1 = tableW * 0.55;
+  const col2 = tableW * 0.45;
+  const detailsH = 90;
+  drawRect(left, y, col1, detailsH);
+  drawRect(left + col1, y, col2, detailsH);
+
+  let ly = y + 5;
+  cellText('6A TYPE OF LEAVE TO BE AVAILED OF', left + 2, ly, { size: 7, bold: true });
+  ly += 5;
+
+  const leaveTypes = [
+    'Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Mandatory/Forced Leave (Sec. 25, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O No. 292)',
+  'Maternity Leave (R.A. No. 11210 / IRR issues by CSC, DOLE and SSS)',
+  'Paternity Leave (R.A. No. 8187 / CSC MC No. 71, s. 1998, as amended)',
+  'Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rule Implementing E.O. No. 292)',
+  'Solo Parent Leave (RA No. 8972 / CSC MC No. 8, s. 2004)',
+  'Study Leave (Sec. 68, Rule XVI, Omnibus Rule Implementing E.O. No. 292)',
+  '10-Day VAWC Leave (RA No. 9262 / CSC MC No. 15, s. 2005)',
+  'Rehabilitation Privilege (Sec. 55, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)',
+  'Special Emergency (Calamity) Leave (CSC MC No. 2, s. 2012, as amended)',
+  'Adoption Leave (R.A. No. 8552)',
+  'Wellness Leave',
+  ];
+  const selectedType = data.leave_type || '';
+  leaveTypes.forEach((lt) => {
+    doc.setFontSize(6.5);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(0, 0, 0);
+    const isSelected = selectedType.toLowerCase().includes(lt.toLowerCase().split(' ')[0].toLowerCase());
+    doc.rect(left + 3, ly - 3, 3, 3);
+    if (isSelected) {
+      doc.setFillColor(0, 0, 0);
+      doc.rect(left + 3.5, ly - 2.5, 2, 2, 'F');
+      doc.setFillColor(255, 255, 255);
+    }
+    doc.setTextColor(0, 0, 0);
+    doc.text(lt, left + 8, ly);
+    ly += 5;
+  });
+
+  let ry = y + 5;
+  const rx = left + col1 + 2;
+  cellText('6B DETAILS OF LEAVE', rx, ry, { size: 7, bold: true });
+  ry += 6;
+  cellText('In case of Vacation/Special Privilege Leave:', rx, ry, { size: 6.5, bold: false });
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setFontSize(6.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Within the Philippines ________________', rx + 5, ry);
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Abroad (Specify) __________________', rx + 5, ry);
+  ry += 7;
+  cellText('In case of Sick Leave:', rx, ry, { size: 6.5, bold: false });
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('In Hospital (Specify Illness) _________', rx + 5, ry);
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Out Patient (Specify Illness) _________', rx + 5, ry);
+  ry += 7;
+  cellText('In case of Special Leave Benefits for Women:', rx, ry, { size: 6.5, bold: false });
+  ry += 5;
+  doc.setTextColor(0, 0, 0);
+  doc.text('(Specify Illness) ____________________', rx + 3, ry);
+  ry += 7;
+  cellText('In case of Study Leave:', rx, ry, { size: 6.5, bold: false });
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Completion of Master's Degree", rx + 5, ry);
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('BAR/Board Examination Review', rx + 5, ry);
+  ry += 6;
+  cellText('Other purpose:', rx, ry, { size: 6.5, bold: false });
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Monetization of Leave Credits', rx + 5, ry);
+  ry += 5;
+  doc.rect(rx, ry - 3, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Terminal Leave', rx + 5, ry);
+  y += detailsH;
+
+  const row6cdH = 26;
+  drawRect(left, y, col1, row6cdH);
+  drawRect(left + col1, y, col2, row6cdH);
+
+  cellText('6C NUMBER OF WORKING DAYS APPLIED FOR', left + 2, y + 5, { size: 7, bold: true });
+  doc.setDrawColor(180, 180, 180);
+  doc.line(left + 4, y + 11, left + col1 - 4, y + 11);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(8);
+  doc.setTextColor(0, 0, 0);
+  doc.text(String(data.num_days || ''), left + 8, y + 10);
+
+  cellText('INCLUSIVE DATES', left + 2, y + 16, { size: 7, bold: true });
+  doc.line(left + 4, y + 22, left + col1 - 4, y + 22);
+  const dates = data.start_date && data.end_date ? `${data.start_date} to ${data.end_date}` : '';
+  doc.setTextColor(0, 0, 0);
+  doc.text(dates, left + 8, y + 21);
+  doc.setDrawColor(0, 0, 0);
+
+  cellText('6D COMPUTATION', left + col1 + 2, y + 5, { size: 7, bold: true });
+  doc.setFontSize(6.5);
+  doc.rect(left + col1 + 5, y + 8, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Not Requested', left + col1 + 10, y + 10.5);
+
+  doc.rect(left + col1 + 5, y + 13, 3, 3);
+  doc.setFillColor(0, 0, 0);
+  doc.rect(left + col1 + 5.5, y + 13.5, 2, 2, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Requested', left + col1 + 10, y + 15.5);
+
+  doc.setDrawColor(180, 180, 180);
+  doc.line(left + col1 + 15, y + row6cdH - 7, right - 15, y + row6cdH - 7);
+  doc.setDrawColor(0, 0, 0);
+  cellText('(Signature of Applicant)', left + col1 + col2 / 2, y + row6cdH - 3, { align: 'center', size: 6.5 });
+
+  y += row6cdH;
+
+  drawRect(left, y, tableW, secH);
+  doc.setFillColor(220, 220, 220);
+  doc.rect(left, y, tableW, secH, 'F');
+  doc.setDrawColor(0);
+  doc.rect(left, y, tableW, secH);
+  cellText('7. DETAILS OF ACTION ON APPLICATION', W / 2, y + 5, { align: 'center', bold: true, size: 8.5 });
+  y += secH;
+
+  const row7H = 48;
+  drawRect(left, y, col1, row7H);
+  drawRect(left + col1, y, col2, row7H);
+  cellText('7A CERTIFICATION OF LEAVE CREDITS', left + 2, y + 5, { size: 7, bold: true });
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('      As of _______________', left + 2, y + 9.5);
+
+  const tblX = left + 5;
+  const tblY = y + 12;
+  doc.rect(tblX, tblY, 35, 5);
+  doc.rect(tblX + 35, tblY, 15, 5);
+  doc.rect(tblX + 50, tblY, 15, 5);
+  doc.setFontSize(6);
+  doc.setTextColor(0, 0, 0);
+  doc.text('', tblX + 2, tblY + 3.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Vacation Leave', tblX + 36, tblY + 3.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text('Sick Leave', tblX + 51, tblY + 3.5);
+
+  const vacationBalance = data.vacation_balance || '';
+  const sickBalance = data.sick_balance || '';
+  const daysApplied = parseInt(data.num_days, 10) || 0;
+
+  ['Total Earned', 'Less this application', 'Balance'].forEach((label, i) => {
+    const rowY = tblY + 5 + i * 5;
+    doc.rect(tblX, rowY, 35, 5);
+    doc.rect(tblX + 35, rowY, 15, 5);
+    doc.rect(tblX + 50, rowY, 15, 5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(label, tblX + 2, rowY + 3.5);
+
+    if (i === 1) {
+      doc.setTextColor(0, 0, 0);
+      doc.text(daysApplied.toString(), tblX + 36, rowY + 3.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(daysApplied.toString(), tblX + 51, rowY + 3.5);
+    } else if (i === 2) {
+      doc.setTextColor(0, 0, 0);
+      doc.text(vacationBalance, tblX + 36, rowY + 3.5);
+      doc.setTextColor(0, 0, 0);
+      doc.text(sickBalance, tblX + 51, rowY + 3.5);
+    }
+  });
+
+  doc.setDrawColor(180, 180, 180);
+  doc.line(left + 15, y + row7H - 5, left + col1 - 15, y + row7H - 5);
+  doc.setDrawColor(0, 0, 0);
+  cellText('DAISY A. FABILEÑA', left + col1 / 2, y + row7H - 7, { align: 'center', size: 7, bold: true });
+  cellText('"AO IV/HRMO"', left + col1 / 2, y + row7H - 3, { align: 'center', size: 7 });
+
+  cellText('7B RECOMMENDATION', left + col1 + 2, y + 5, { size: 7, bold: true });
+  doc.setFontSize(7);
+  doc.rect(left + col1 + 2, y + 8, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('For approval', left + col1 + 7, y + 10.5);
+
+  doc.setFillColor(0, 0, 0);
+  doc.rect(left + col1 + 2.5, y + 14.5, 2, 2, 'F');
+  doc.setFillColor(255, 255, 255);
+  doc.rect(left + col1 + 2, y + 14, 3, 3);
+  doc.setTextColor(0, 0, 0);
+  doc.text('For disapproval due to _______________________', left + col1 + 7, y + 16.5);
+
+  doc.setDrawColor(180, 180, 180);
+  doc.line(left + col1 + 10, y + 22, right - 10, y + 22);
+  doc.line(left + col1 + 10, y + 28, right - 10, y + 28);
+  doc.line(left + col1 + 10, y + 34, right - 10, y + 34);
+  doc.setDrawColor(0, 0, 0);
+
+  y += row7H;
+
+  const row7cdH = 52;
+  drawRect(left, y, tableW, row7cdH);
+
+  cellText('7.C APPROVED FOR:', left + 2, y + 5, { size: 7, bold: true });
+  doc.setFontSize(7);
+  doc.setTextColor(0, 0, 0);
+  doc.text('_______ days with pay', left + 4, y + 10);
+  doc.setTextColor(0, 0, 0);
+  doc.text('_______ days without pay', left + 4, y + 15);
+  doc.setTextColor(0, 0, 0);
+  doc.text('_______ others (Specify)', left + 4, y + 20);
+
+  cellText('7.D DISAPPROVED DUE TO:', left + col1 + 2, y + 5, { size: 7, bold: true });
+  doc.setDrawColor(180, 180, 180);
+  for (let i = 0; i < 3; i++) {
+    doc.line(left + col1 + 4, y + 11 + i * 5, right - 4, y + 11 + i * 5);
+  }
+
+  doc.line(W / 2 - 35, y + row7cdH - 10, W / 2 + 35, y + row7cdH - 10);
+  doc.setDrawColor(0, 0, 0);
+  cellText('EDWARD V. SERNADILLA, RPF, DPA /', W / 2, y + row7cdH - 12, { align: 'center', size: 8, bold: true });
+  cellText('OIC, CENR Officer', W / 2, y + row7cdH - 6, { align: 'center', size: 7.5 });
+}

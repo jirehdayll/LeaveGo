@@ -5,6 +5,7 @@ import { leaveRequestsAPI } from '../api/leaveRequests';
 import AdminLayout from '../components/AdminLayout';
 import { generateTravelOrderPDF, generateLeaveApplicationPDF } from '../lib/pdfGenerator';
 import { buildPdfDataFromRequest } from '../lib/pdfDataBuilder';
+import { generateApplicationWord } from '../lib/applicationWord';
 import { useAuth } from '../hooks/useAuth';
 import {
   Grid3X3, List, Download, Eye, Plane, FileText,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import ConfirmationModal from '../components/ConfirmationModal';
 
-function FileCard({ req, view, onClick, onDownload, onArchive }) {
+function FileCard({ req, view, onClick, onDownload, onDownloadWord, onArchive }) {
   const isTravel = req.request_type === REQUEST_TYPES.TRAVEL;
   const dateStr = new Date(req.submitted_at || req.created_at).toLocaleDateString('en-PH');
 
@@ -34,6 +35,9 @@ function FileCard({ req, view, onClick, onDownload, onArchive }) {
           </button>
           <button onClick={(e) => { e.stopPropagation(); onDownload(); }} className="flex-1 text-xs py-1.5 rounded-lg bg-emerald-100 hover:bg-emerald-200 text-emerald-700 font-medium transition-colors flex items-center justify-center gap-1">
             <Download className="w-3 h-3" /> PDF
+          </button>
+          <button onClick={(e) => { e.stopPropagation(); onDownloadWord(); }} className="flex-1 text-xs py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 font-medium transition-colors flex items-center justify-center gap-1">
+            <FileText className="w-3 h-3" /> Word
           </button>
           <button onClick={(e) => { e.stopPropagation(); onArchive(); }} className="flex-1 text-xs py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 font-medium transition-colors flex items-center justify-center gap-1">
             <Archive className="w-3 h-3" /> Archive
@@ -70,6 +74,7 @@ function FileCard({ req, view, onClick, onDownload, onArchive }) {
         <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
           <button onClick={(e) => { e.stopPropagation(); onClick(); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><Eye className="w-4 h-4" /></button>
           <button onClick={(e) => { e.stopPropagation(); onDownload(); }} className="p-2 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-xl transition-all"><Download className="w-4 h-4" /></button>
+          <button onClick={(e) => { e.stopPropagation(); onDownloadWord(); }} className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all"><FileText className="w-4 h-4" /></button>
           <button onClick={(e) => { e.stopPropagation(); onArchive(); }} className="p-2 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-xl transition-all" title="Archive">
             <Archive className="w-4 h-4" />
           </button>
@@ -94,6 +99,16 @@ function PDFViewModal({ request, onClose, getAccounts }) {
     }
   };
 
+  const downloadWord = async () => {
+    try {
+      // Use the same data preparation as PDF for consistency
+      await generateApplicationWord(request, getAccounts());
+    } catch (err) {
+      console.error('Word download failed:', err);
+      alert('Failed to generate Word document. Please try again.');
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
@@ -106,6 +121,9 @@ function PDFViewModal({ request, onClose, getAccounts }) {
           <div className="flex items-center gap-2">
             <button onClick={downloadPDF} className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all">
               <Download className="w-3.5 h-3.5" /> Download PDF
+            </button>
+            <button onClick={downloadWord} className="flex items-center gap-1.5 bg-white/20 hover:bg-white/30 text-white text-xs font-semibold px-3 py-2 rounded-xl transition-all">
+              <FileText className="w-3.5 h-3.5" /> Download Word
             </button>
             <button onClick={onClose} className="w-8 h-8 bg-white/20 hover:bg-white/30 rounded-full flex items-center justify-center text-white transition-all">
               <X className="w-4 h-4" />
@@ -219,6 +237,16 @@ export default function ApprovedForms() {
     }
   };
 
+  const downloadWord = async (req) => {
+    try {
+      // Use the same data preparation as PDF for consistency
+      await generateApplicationWord(req, getAccounts());
+    } catch (err) {
+      console.error('Word download failed:', err);
+      alert('Failed to generate Word document. Please try again.');
+    }
+  };
+
   const archiveForm = (req) => {
     setConfirmModal({
       isOpen: true,
@@ -309,7 +337,7 @@ export default function ApprovedForms() {
         ) : view === 'grid' ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
             {filtered.map(req => (
-              <FileCard key={req.id} req={req} view="grid" onClick={() => setSelected(req)} onDownload={() => downloadPDF(req)} onArchive={() => archiveForm(req)} />
+              <FileCard key={req.id} req={req} view="grid" onClick={() => setSelected(req)} onDownload={() => downloadPDF(req)} onDownloadWord={() => downloadWord(req)} onArchive={() => archiveForm(req)} />
             ))}
           </div>
         ) : (
@@ -325,7 +353,7 @@ export default function ApprovedForms() {
               </thead>
               <tbody className="divide-y divide-slate-50">
                 {filtered.map(req => (
-                  <FileCard key={req.id} req={req} view="list" onClick={() => setSelected(req)} onDownload={() => downloadPDF(req)} onArchive={() => archiveForm(req)} />
+                  <FileCard key={req.id} req={req} view="list" onClick={() => setSelected(req)} onDownload={() => downloadPDF(req)} onDownloadWord={() => downloadWord(req)} onArchive={() => archiveForm(req)} />
                 ))}
               </tbody>
             </table>

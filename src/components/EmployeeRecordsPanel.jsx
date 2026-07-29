@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { MONTHS, REQUEST_STATUS, REQUEST_TYPES } from '../constants';
 import { isFormOfAccount, formatSalaryDisplay } from '../utils/employeeMatching';
 import { leaveRequestsAPI } from '../api/leaveRequests';
+import { leaveBalancesAPI } from '../api/leaveBalances';
 import {
   getUnifiedLeaveBalances,
   LEAVE_BALANCES_UPDATED_EVENT,
@@ -9,15 +10,18 @@ import {
 import {
   Bar, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts';
-import { X, TrendingUp, TrendingDown, Minus, Pencil, Check, Loader2 } from 'lucide-react';
+import { X, TrendingUp, TrendingDown, Minus, Pencil, Check, Loader2, Save, XCircle } from 'lucide-react';
 import { useLeaveBalance } from '../contexts/LeaveBalanceContext';
+import { useAuth } from '../hooks/useAuth';
 
 const formatDays = (val) => val !== undefined && val !== null ? Math.round(Number(val)).toString() : '0';
 
 function RecordsBody({ employee, allForms = [], onUpdateForms }) {
   const [period, setPeriod] = useState('monthly');
   const [editModal, setEditModal] = useState({ isOpen: false, form: null, counterValue: '', loading: false });
+  const [balanceEditModal, setBalanceEditModal] = useState({ isOpen: false, loading: false, balances: {} });
   const { balances, fetchUserBalance } = useLeaveBalance();
+  const { user } = useAuth();
   const forms = (allForms || []).filter((f) => isFormOfAccount(f, employee));
 
   useEffect(() => {
@@ -72,6 +76,118 @@ function RecordsBody({ employee, allForms = [], onUpdateForms }) {
       console.error('Error updating counter:', error);
       setEditModal(prev => ({ ...prev, loading: false }));
       alert('Failed to update counter. Please try again.');
+    }
+  };
+
+  const handleEditBalances = () => {
+    if (!balance) return;
+    
+    setBalanceEditModal({
+      isOpen: true,
+      loading: false,
+      balances: {
+        vacation_leave_balance: Math.round(Number(balance.vacation_leave?.balance) || 0),
+        sick_leave_balance: Math.round(Number(balance.sick_leave?.balance) || 0),
+        forced_leave_balance: Math.round(Number(balance.forced_leave?.balance) || 0),
+        special_leave_balance: Math.round(Number(balance.special_leave?.balance) || 0),
+        wellness_leave_balance: Math.round(Number(balance.wellness_leave?.balance) || 0),
+      }
+    });
+  };
+
+  const handleSaveBalances = async () => {
+    if (!employee?.id) return;
+    
+    setBalanceEditModal(prev => ({ ...prev, loading: true }));
+    
+    try {
+      const { vacation_leave_balance, sick_leave_balance, forced_leave_balance, special_leave_balance, wellness_leave_balance } = balanceEditModal.balances;
+      
+      const currentBalances = {
+        vacation_leave: Math.round(Number(balance?.vacation_leave?.balance) || 0),
+        sick_leave: Math.round(Number(balance?.sick_leave?.balance) || 0),
+        forced_leave: Math.round(Number(balance?.forced_leave?.balance) || 0),
+        special_leave: Math.round(Number(balance?.special_leave?.balance) || 0),
+        wellness_leave: Math.round(Number(balance?.wellness_leave?.balance) || 0),
+      };
+      
+      // Update each balance type individually only if changed
+      const updates = [
+        { type: 'vacation_leave', amount: vacation_leave_balance - currentBalances.vacation_leave },
+        { type: 'sick_leave', amount: sick_leave_balance - currentBalances.sick_leave },
+        { type: 'forced_leave', amount: forced_leave_balance - currentBalances.forced_leave },
+        { type: 'special_leave', amount: special_leave_balance - currentBalances.special_leave },
+        { type: 'wellness_leave', amount: wellness_leave_balance - currentBalances.wellness_leave },
+      ].filter(u => u.amount !== 0);
+      
+      let dbUpdateSuccess = true;
+      for (const update of updates) {
+        try {
+          const res = await leaveBalancesAPI.adjustBalance(
+            employee.id,
+            update.type,
+            update.amount,
+            'Admin manual adjustment',
+            user?.email || 'admin'
+          );
+          if (res && res.success === false) {
+            console.warn(`Failed to update ${update.type} via DB:`, res.error);
+            dbUpdateSuccess = false;
+          }
+        } catch (dbErr) {
+          console.warn(`DB adjust failed for ${update.type}, fallback to local storage:`, dbErr);
+          dbUpdateSuccess = false;
+        }
+      }
+
+      // Update local storage to ensure UI updates immediately
+      const accounts = JSON.parse(localStorage.getItem('userAccounts') || '[]');
+      const accountIndex = accounts.findIndex(a => String(a.id) === String(employee.id));
+      if (accountIndex >= 0) {
+        const acc = accounts[accountIndex];
+        const oldBalances = acc.leave_balances || {
+           forced_leave: 5, special_leave_privileges: 3, wellness_leave: 5, accumulated_sick: 0, accumulated_vacation: 0
+        };
+        acc.leave_balances = {
+           ...oldBalances,
+           vacation_leave_balance: vacation_leave_balance,
+           sick_leave_balance: sick_leave_balance,
+           forced_leave_balance: forced_leave_balance,
+           special_leave_balance: special_leave_balance,
+           wellness_leave_balance: wellness_leave_balance,
+           
+           forced_leave: forced_leave_balance,
+           special_leave_privileges: special_leave_balance,
+           wellness_leave: wellness_leave_balance,
+           accumulated_vacation: vacation_leave_balance,
+           accumulated_sick: sick_leave_balance
+        };
+        localStorage.setItem('userAccounts', JSON.stringify(accounts));
+      }
+      
+      // Force refresh balance data from database
+      await fetchUserBalance(employee.id);
+      
+      // Force a complete re-render by updating the parent's forms data
+      if (onUpdateForms) {
+        onUpdateForms();
+      }
+      
+      // Dispatch event to notify other components (support both accountId and userId for compatibility)
+      window.dispatchEvent(new CustomEvent(LEAVE_BALANCES_UPDATED_EVENT, { detail: { userId: employee.id, accountId: employee.id } }));
+      
+      // Show success message
+      if (dbUpdateSuccess) {
+        alert('Leave balances updated successfully!');
+      } else {
+        alert('Leave balances updated (local storage only - database update failed)');
+      }
+      
+      setBalanceEditModal({ isOpen: false, loading: false, balances: {} });
+    } catch (error) {
+      console.error('Error updating balances:', error);
+      setBalanceEditModal(prev => ({ ...prev, loading: false }));
+      alert('Failed to update leave balances. Please try again.');
     }
   };
 
@@ -182,7 +298,16 @@ function RecordsBody({ employee, allForms = [], onUpdateForms }) {
 
       {/* Leave Balances Section — synced with account leave credits */}
       <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4">
-        <h4 className="font-bold text-slate-800 mb-3 text-sm">Leave Balances</h4>
+        <div className="flex items-center justify-between mb-3">
+          <h4 className="font-bold text-slate-800 text-sm">Leave Balances</h4>
+          <button
+            onClick={handleEditBalances}
+            className="flex items-center gap-1 px-2 py-1 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-600 hover:bg-slate-50 transition-colors"
+          >
+            <Pencil className="w-3 h-3" />
+            Edit
+          </button>
+        </div>
         {balance ? (
           <div className="grid grid-cols-5 gap-2">
             <div className="bg-white rounded-lg p-2 border border-slate-200 text-center">
@@ -338,6 +463,153 @@ function RecordsBody({ employee, allForms = [], onUpdateForms }) {
                 >
                   {editModal.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
                   {editModal.loading ? 'Saving...' : 'Save'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Leave Balance Edit Modal */}
+      {balanceEditModal.isOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setBalanceEditModal({ isOpen: false, loading: false, balances: {} })} />
+          <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+            <div className="px-7 py-5 border-b border-slate-100 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                  <Pencil className="w-5 h-5 text-blue-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-slate-800">Edit Leave Balances</h3>
+                  <p className="text-xs text-slate-500">Adjust employee leave credits</p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setBalanceEditModal({ isOpen: false, loading: false, balances: {} })}
+                className="w-8 h-8 bg-slate-100 hover:bg-slate-200 rounded-full flex items-center justify-center transition-all"
+              >
+                <XCircle className="w-4 h-4 text-slate-600" />
+              </button>
+            </div>
+            <div className="p-7 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Vacation Leave
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={balanceEditModal.balances.vacation_leave_balance}
+                    onChange={(e) => setBalanceEditModal(prev => ({ 
+                      ...prev, 
+                      balances: { 
+                        ...prev.balances, 
+                        vacation_leave_balance: parseInt(e.target.value) || 0 
+                      } 
+                    }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
+                    disabled={balanceEditModal.loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Sick Leave
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={balanceEditModal.balances.sick_leave_balance}
+                    onChange={(e) => setBalanceEditModal(prev => ({ 
+                      ...prev, 
+                      balances: { 
+                        ...prev.balances, 
+                        sick_leave_balance: parseInt(e.target.value) || 0 
+                      } 
+                    }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
+                    disabled={balanceEditModal.loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Forced Leave
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={balanceEditModal.balances.forced_leave_balance}
+                    onChange={(e) => setBalanceEditModal(prev => ({ 
+                      ...prev, 
+                      balances: { 
+                        ...prev.balances, 
+                        forced_leave_balance: parseInt(e.target.value) || 0 
+                      } 
+                    }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
+                    disabled={balanceEditModal.loading}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Special Leave
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={balanceEditModal.balances.special_leave_balance}
+                    onChange={(e) => setBalanceEditModal(prev => ({ 
+                      ...prev, 
+                      balances: { 
+                        ...prev.balances, 
+                        special_leave_balance: parseInt(e.target.value) || 0 
+                      } 
+                    }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
+                    disabled={balanceEditModal.loading}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Wellness Leave
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={balanceEditModal.balances.wellness_leave_balance}
+                    onChange={(e) => setBalanceEditModal(prev => ({ 
+                      ...prev, 
+                      balances: { 
+                        ...prev.balances, 
+                        wellness_leave_balance: parseInt(e.target.value) || 0 
+                      } 
+                    }))}
+                    className="w-full px-4 py-3 rounded-xl border border-slate-200 text-sm focus:ring-2 focus:ring-emerald-500 outline-none bg-white transition"
+                    disabled={balanceEditModal.loading}
+                  />
+                </div>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setBalanceEditModal({ isOpen: false, loading: false, balances: {} })}
+                  disabled={balanceEditModal.loading}
+                  className="flex-1 px-4 py-3 rounded-xl bg-slate-100 text-slate-700 font-semibold text-sm hover:bg-slate-200 transition-colors disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveBalances}
+                  disabled={balanceEditModal.loading}
+                  className="flex-1 px-4 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {balanceEditModal.loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {balanceEditModal.loading ? 'Saving...' : 'Save Changes'}
                 </button>
               </div>
             </div>

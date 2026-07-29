@@ -2,9 +2,10 @@ import React, { useEffect, useState, useRef } from 'react';
 import { MONTHS, REQUEST_STATUS, REQUEST_TYPES } from '../constants';
 import { supabase } from '../lib/supabaseClient';
 import AdminLayout from '../components/AdminLayout';
-import { ChevronLeft, ChevronRight, Calendar, X, Download, FileSpreadsheet } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, X, Download, FileSpreadsheet, FileText } from 'lucide-react';
 import { generateMonthlySummaryPDF } from '../lib/monthlySummaryPDF';
 import { generateMonthlySummaryExcel } from '../lib/excelGenerator';
+import { generateMonthlySummaryWord } from '../lib/wordGenerator';
 import { useAuth } from '../hooks/useAuth';
 import { getCalendarEventLabels } from '../utils/calendarLabels';
 
@@ -29,6 +30,7 @@ export default function MonthlySummary() {
   const [loading, setLoading] = useState(true);
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isGeneratingExcel, setIsGeneratingExcel] = useState(false);
+  const [isGeneratingWord, setIsGeneratingWord] = useState(false);
   const now = new Date();
   const [viewMonth, setViewMonth] = useState(now.getMonth());
   const [viewYear, setViewYear] = useState(now.getFullYear());
@@ -41,9 +43,11 @@ export default function MonthlySummary() {
 
     try {
       console.log('Starting professional PDF generation...');
+      console.log('Month forms data:', monthForms);
+      console.log('Month:', MONTHS[viewMonth], 'Year:', viewYear);
 
-      // Generate PDF using the new professional format
-      await generateMonthlySummaryPDF(monthForms, MONTHS[viewMonth], viewYear, forms);
+      // Generate PDF using the full forms data for proper control number resolution
+      await generateMonthlySummaryPDF(forms, MONTHS[viewMonth], viewYear, forms);
 
       console.log('PDF generated successfully');
 
@@ -63,7 +67,10 @@ export default function MonthlySummary() {
 
     try {
       console.log('Starting professional Excel generation...');
-      await generateMonthlySummaryExcel(monthForms, MONTHS[viewMonth], viewYear, forms);
+      console.log('Month forms data:', monthForms);
+      console.log('Month:', MONTHS[viewMonth], 'Year:', viewYear);
+      // Generate Excel using the full forms data for proper control number resolution
+      await generateMonthlySummaryExcel(forms, MONTHS[viewMonth], viewYear, forms);
       console.log('Excel generated successfully');
     } catch (error) {
       console.error('Error generating Excel:', error);
@@ -71,6 +78,26 @@ export default function MonthlySummary() {
     } finally {
       setIsGeneratingExcel(false);
       console.log('Excel generation completed');
+    }
+  };
+
+  const downloadWord = async () => {
+    console.log('Word download triggered');
+    setIsGeneratingWord(true);
+
+    try {
+      console.log('Starting professional Word generation...');
+      console.log('Month forms data:', monthForms);
+      console.log('Month:', MONTHS[viewMonth], 'Year:', viewYear);
+      // Generate Word using the full forms data for proper control number resolution
+      await generateMonthlySummaryWord(forms, MONTHS[viewMonth], viewYear, forms);
+      console.log('Word generated successfully');
+    } catch (error) {
+      console.error('Error generating Word:', error);
+      alert('Failed to generate Word. Please try again.\n\nError: ' + error.message);
+    } finally {
+      setIsGeneratingWord(false);
+      console.log('Word generation completed');
     }
   };
 
@@ -108,8 +135,27 @@ export default function MonthlySummary() {
 
   const accounts = getAccounts();
   const monthForms = forms.filter(f => {
-    const d = new Date(f.submitted_at || f.created_at);
-    return d.getMonth() === viewMonth && d.getFullYear() === viewYear;
+    const d = f.details || {};
+    const startStr = d.start_date || d.departure_date || f.submitted_at || f.created_at;
+    const endStr = d.end_date || d.arrival_date || f.submitted_at || f.created_at;
+    
+    if (!startStr || !endStr) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === viewMonth && fb.getFullYear() === viewYear;
+    }
+
+    const start = new Date(startStr);
+    const end = new Date(endStr);
+    
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) {
+      const fb = new Date(f.submitted_at || f.created_at);
+      return fb.getMonth() === viewMonth && fb.getFullYear() === viewYear;
+    }
+
+    const startOfMonth = new Date(viewYear, viewMonth, 1);
+    const endOfMonth = new Date(viewYear, viewMonth + 1, 0, 23, 59, 59, 999);
+    
+    return start <= endOfMonth && end >= startOfMonth;
   });
 
   // Group by employee
@@ -254,6 +300,29 @@ export default function MonthlySummary() {
                   <FileSpreadsheet className="w-4 h-4" />
                   <span className="hidden sm:inline">Download Excel</span>
                   <span className="sm:hidden">Excel</span>
+                </>
+              )}
+            </button>
+            <button
+              onClick={downloadWord}
+              disabled={isGeneratingWord}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 text-sm font-semibold rounded-xl transition-all shadow-sm ${isGeneratingWord
+                ? 'bg-gray-400 text-white cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }`}
+              title="Download as Word"
+            >
+              {isGeneratingWord ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  <span className="hidden sm:inline">Generating...</span>
+                  <span className="sm:hidden">...</span>
+                </>
+              ) : (
+                <>
+                  <FileText className="w-4 h-4" />
+                  <span className="hidden sm:inline">Download Word</span>
+                  <span className="sm:hidden">Word</span>
                 </>
               )}
             </button>

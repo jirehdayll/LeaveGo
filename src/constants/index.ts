@@ -17,7 +17,6 @@ export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
 export const APP_ROUTES = {
   LOGIN: '/login',
   RESET_PASSWORD: '/reset-password',
-  PASSWORD_RESET: '/password-reset',
   ROOT: '/',
   SELECTION: '/selection',
   DASHBOARD: '/dashboard',
@@ -74,19 +73,19 @@ export const STATUS_COLORS: Record<RequestStatus, { bg: string; text: string; bo
 };
 
 export const LEAVE_TYPES = [
-  'Vacation Leave',
-  'Mandatory/Forced Leave',
-  'Sick Leave',
-  'Maternity Leave',
-  'Paternity Leave',
-  'Special Privilege Leave',
-  'Solo Parent Leave',
-  'Study Leave',
-  '10-Day VAWC Leave',
-  'Rehabilitation Privilege',
-  'Special Leave Benefits for Women',
-  'Special Emergency (Calamity) Leave',
-  'Adoption Leave',
+  'Vacation Leave (Sec. 51, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Mandatory/Forced Leave (Sec. 25, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Sick Leave (Sec. 43, Rule XVI, Omnibus Rules Implementing E.O No. 292)',
+  'Maternity Leave (R.A. No. 11210 / IRR issues by CSC, DOLE and SSS)',
+  'Paternity Leave (R.A. No. 8187 / CSC MC No. 71, s. 1998, as amended)',
+  'Special Privilege Leave (Sec. 21, Rule XVI, Omnibus Rule Implementing E.O. No. 292)',
+  'Solo Parent Leave (RA No. 8972 / CSC MC No. 8, s. 2004)',
+  'Study Leave (Sec. 68, Rule XVI, Omnibus Rule Implementing E.O. No. 292)',
+  '10-Day VAWC Leave (RA No. 9262 / CSC MC No. 15, s. 2005)',
+  'Rehabilitation Privilege (Sec. 55, Rule XVI, Omnibus Rules Implementing E.O. No. 292)',
+  'Special Leave Benefits for Women (RA No. 9710 / CSC MC No. 25, s. 2010)',
+  'Special Emergency (Calamity) Leave (CSC MC No. 2, s. 2012, as amended)',
+  'Adoption Leave (R.A. No. 8552)',
   'Wellness Leave',
 ] as const;
 
