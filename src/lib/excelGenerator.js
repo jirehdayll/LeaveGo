@@ -2,6 +2,34 @@ import * as ExcelJSModule from 'exceljs/dist/exceljs.min.js';
 const ExcelJS = ExcelJSModule.default || ExcelJSModule;
 import { saveAs } from 'file-saver';
 import { resolveControlNumber } from './applicationNumber';
+import { buildPdfDataFromRequest } from './pdfDataBuilder';
+import { REQUEST_TYPES } from '../constants';
+
+const DENR_LOGO_PATH = '/denr-logo.png';
+
+async function addDenrLogoToWorksheet(workbook, worksheet, row, col, width = 60, height = 60) {
+  try {
+    const response = await fetch(DENR_LOGO_PATH);
+    const blob = await response.blob();
+    const arrayBuffer = await blob.arrayBuffer();
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binary = '';
+    for (let i = 0; i < uint8Array.length; i++) {
+      binary += String.fromCharCode(uint8Array[i]);
+    }
+    const base64 = window.btoa(binary);
+    const imageId = workbook.addImage({
+      base64,
+      extension: 'png',
+    });
+    worksheet.addImage(imageId, {
+      tl: { col, row },
+      ext: { width, height },
+    });
+  } catch (error) {
+    console.warn('Failed to load DENR logo:', error);
+  }
+}
 
 // Colors (ARGB for ExcelJS)
 const COLORS = {
@@ -364,4 +392,791 @@ export const generateMonthlySummaryExcel = async (monthForms, month, year, allAp
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `Monthly_Attendance_Report_${month}_${year}.xlsx`);
+};
+
+/**
+ * Generates a Leave Application Excel document matching CSF No. 6 format
+ * Uses the same data pipeline as PDF generator for consistency
+ */
+export const generateLeaveApplicationExcel = async (request, accounts = []) => {
+  const data = buildPdfDataFromRequest(request, accounts);
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Leave Application');
+
+  // Page setup for A4 portrait
+  worksheet.pageSetup.paperSize = 9;
+  worksheet.pageSetup.orientation = 'portrait';
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 0;
+
+  // Column widths - adjusted to prevent squishing
+  worksheet.columns = [
+    { width: 20 }, // A - spacer
+    { width: 22 }, // B - field labels
+    { width: 18 }, // C - values
+    { width: 15 }, // D - values
+    { width: 15 }, // E - values
+    { width: 18 }, // F - values
+    { width: 18 }, // G - values
+    { width: 15 }, // H - values
+  ];
+
+  const thinBorder = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' },
+  };
+
+  const mediumBorder = {
+    top: { style: 'medium' },
+    left: { style: 'medium' },
+    bottom: { style: 'medium' },
+    right: { style: 'medium' },
+  };
+
+  const headerStyle = {
+    font: { name: 'Arial', size: 8, bold: true },
+    alignment: { horizontal: 'center', vertical: 'middle' },
+    fill: { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCDCDC' } },
+    border: thinBorder,
+  };
+
+  const normalStyle = {
+    font: { name: 'Arial', size: 9 },
+    alignment: { vertical: 'middle' },
+    border: thinBorder,
+  };
+
+  // Header section with logo
+  await addDenrLogoToWorksheet(workbook, worksheet, 0, 0, 80, 80);
+
+  worksheet.mergeCells('B1:H1');
+  worksheet.getCell('B1').value = 'Republic of the Philippines';
+  worksheet.getCell('B1').font = { name: 'Arial', size: 8, bold: true };
+  worksheet.getCell('B1').alignment = { horizontal: 'center' };
+
+  worksheet.mergeCells('B2:H2');
+  worksheet.getCell('B2').value = 'Department of Environment and Natural Resources';
+  worksheet.getCell('B2').font = { name: 'Arial', size: 8, bold: true };
+  worksheet.getCell('B2').alignment = { horizontal: 'center' };
+
+  worksheet.mergeCells('B3:H3');
+  worksheet.getCell('B3').value = 'PROVINCIAL ENVIRONMENT AND NATURAL RESOURCES OFFICE';
+  worksheet.getCell('B3').font = { name: 'Arial', size: 8, bold: true };
+  worksheet.getCell('B3').alignment = { horizontal: 'center' };
+
+  worksheet.mergeCells('B4:H4');
+  worksheet.getCell('B4').value = 'REGION III, Iba, Zambales';
+  worksheet.getCell('B4').font = { name: 'Arial', size: 8, bold: true };
+  worksheet.getCell('B4').alignment = { horizontal: 'center' };
+
+  // Form title
+  worksheet.mergeCells('B5:H5');
+  worksheet.getCell('B5').value = 'APPLICATION FOR LEAVE';
+  worksheet.getCell('B5').font = { name: 'Arial', size: 14, bold: true };
+  worksheet.getCell('B5').alignment = { horizontal: 'center' };
+
+  // Control number
+  if (data.control_number) {
+    worksheet.mergeCells('G6:H6');
+    worksheet.getCell('G6').value = `NO. ${data.control_number}`;
+    worksheet.getCell('G6').font = { name: 'Arial', size: 9, bold: true };
+    worksheet.getCell('G6').alignment = { horizontal: 'center' };
+    worksheet.getCell('G6').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFEE00' } };
+    worksheet.getCell('G6').border = mediumBorder;
+  }
+
+  let row = 7;
+
+  // Row 1: Office/Department and Name
+  worksheet.mergeCells('B7:C7');
+  worksheet.getCell('B7').value = '1. OFFICE/DEPARTMENT';
+  worksheet.getCell('B7').font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell('B7').alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell('B7').border = thinBorder;
+
+  worksheet.mergeCells('D7:H7');
+  worksheet.getCell('D7').value = data.department || '';
+  worksheet.getCell('D7').font = { name: 'Arial', size: 9 };
+  worksheet.getCell('D7').alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell('D7').border = thinBorder;
+
+  row++;
+  // Name field - full name merged across columns
+  worksheet.mergeCells(`B${row}:H${row}`);
+  worksheet.getCell(`B${row}`).value = '2. NAME:';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  row++;
+  // Parse full name properly
+  const fullName = data.full_name || `${data.first_name || ''} ${data.middle_name || ''} ${data.surname || ''}`.trim();
+  worksheet.mergeCells(`B${row}:H${row}`);
+  worksheet.getCell(`B${row}`).value = fullName;
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 9 };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  row++;
+  // Row 2: Date of Filing, Position, Salary - properly separated
+  worksheet.mergeCells(`B${row}:C${row}`);
+  worksheet.getCell(`B${row}`).value = '3. DATE OF FILING';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+  
+  worksheet.getCell(`C${row}`).value = data.date_of_filing || new Date().toLocaleDateString();
+  worksheet.getCell(`C${row}`).font = { name: 'Arial', size: 9 };
+  worksheet.getCell(`C${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`C${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`D${row}:E${row}`);
+  worksheet.getCell(`D${row}`).value = '4. POSITION';
+  worksheet.getCell(`D${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`D${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`D${row}`).border = thinBorder;
+  
+  worksheet.getCell(`E${row}`).value = data.position || '';
+  worksheet.getCell(`E${row}`).font = { name: 'Arial', size: 9 };
+  worksheet.getCell(`E${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`E${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row}:G${row}`);
+  worksheet.getCell(`F${row}`).value = '5. SALARY';
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row}`).border = thinBorder;
+  
+  const salaryDisplay = data.salary ? (String(data.salary).startsWith('₱') ? data.salary : `₱ ${data.salary}`) : '';
+  worksheet.getCell(`G${row}`).value = salaryDisplay;
+  worksheet.getCell(`G${row}`).font = { name: 'Arial', size: 9 };
+  worksheet.getCell(`G${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`G${row}`).border = thinBorder;
+  
+  worksheet.getCell(`H${row}`).border = thinBorder;
+
+  row++;
+  // Section 6 header
+  worksheet.mergeCells(`B${row}:H${row}`);
+  worksheet.getCell(`B${row}`).value = '6. DETAILS OF APPLICATION';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 8.5, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCDCDC' } };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  row++;
+  // Section 6A: Type of Leave - reduced blank space
+  const startDetailsRow = row;
+  const endDetailsRow = row + 14; // Reduced from 18 to 14
+
+  worksheet.mergeCells(`B${row}:E${row}`);
+  worksheet.getCell(`B${row}`).value = '6A TYPE OF LEAVE TO BE AVAILED OF';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  const leaveTypes = [
+    'Vacation Leave',
+    'Mandatory/Forced Leave',
+    'Sick Leave',
+    'Maternity Leave',
+    'Paternity Leave',
+    'Special Privilege Leave',
+    'Solo Parent Leave',
+    'Study Leave',
+    '10-Day VAWC Leave',
+    'Rehabilitation Privilege',
+    'Special Leave Benefits for Women',
+    'Special Emergency (Calamity) Leave',
+    'Adoption Leave',
+    'Wellness Leave',
+  ];
+
+  const selectedType = data.leave_type || '';
+  leaveTypes.forEach((lt, idx) => {
+    const currentRow = row + 1 + idx;
+    worksheet.mergeCells(`B${currentRow}:E${currentRow}`);
+    worksheet.getCell(`B${currentRow}`).value = `[${selectedType.toLowerCase().includes(lt.toLowerCase().split(' ')[0].toLowerCase()) ? 'X' : ' '}] ${lt}`;
+    worksheet.getCell(`B${currentRow}`).font = { name: 'Arial', size: 6.5 };
+    worksheet.getCell(`B${currentRow}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`B${currentRow}`).border = thinBorder;
+  });
+
+  // Section 6B: Details of Leave
+  worksheet.mergeCells(`F${row}:H${row}`);
+  worksheet.getCell(`F${row}`).value = '6B DETAILS OF LEAVE';
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row}`).border = thinBorder;
+
+  const detailLabels = [
+    'Within the Philippines: [ ]',
+    'Abroad (Specify): ____________',
+    'In Hospital (Specify): ____________',
+    'Out Patient (Specify): ____________',
+    'Specify Illness: ____________',
+    "Completion of Master's Degree: [ ]",
+    'BAR/Board Examination Review: [ ]',
+    'Monetization of Leave Credits: [ ]',
+    'Terminal Leave: [ ]',
+  ];
+
+  detailLabels.forEach((label, idx) => {
+    const currentRow = row + 1 + idx;
+    worksheet.mergeCells(`F${currentRow}:H${currentRow}`);
+    worksheet.getCell(`F${currentRow}`).value = label;
+    worksheet.getCell(`F${currentRow}`).font = { name: 'Arial', size: 6.5 };
+    worksheet.getCell(`F${currentRow}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`F${currentRow}`).border = thinBorder;
+  });
+
+  row = endDetailsRow + 1;
+  // Section 6C: Number of Working Days and Inclusive Dates
+  worksheet.mergeCells(`B${row}:E${row}`);
+  worksheet.getCell(`B${row}`).value = '6C NUMBER OF WORKING DAYS APPLIED FOR';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`B${row + 1}:E${row + 1}`);
+  const numDays = parseInt(data.num_days, 10) || 0;
+  worksheet.getCell(`B${row + 1}`).value = numDays;
+  worksheet.getCell(`B${row + 1}`).font = { name: 'Arial', size: 9, bold: true };
+  worksheet.getCell(`B${row + 1}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${row + 1}`).border = thinBorder;
+  worksheet.getCell(`B${row + 1}`).numFmt = '0';
+
+  worksheet.mergeCells(`B${row + 2}:E${row + 2}`);
+  worksheet.getCell(`B${row + 2}`).value = 'INCLUSIVE DATES';
+  worksheet.getCell(`B${row + 2}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row + 2}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 2}`).border = thinBorder;
+
+  const dates = data.start_date && data.end_date ? `${data.start_date} to ${data.end_date}` : '';
+  worksheet.mergeCells(`B${row + 3}:E${row + 3}`);
+  worksheet.getCell(`B${row + 3}`).value = dates;
+  worksheet.getCell(`B${row + 3}`).font = { name: 'Arial', size: 9 };
+  worksheet.getCell(`B${row + 3}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 3}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row}:H${row}`);
+  worksheet.getCell(`F${row}`).value = '6D COMPUTATION';
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row + 1}:H${row + 1}`);
+  worksheet.getCell(`F${row + 1}`).value = '[ ] Not Requested';
+  worksheet.getCell(`F${row + 1}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`F${row + 1}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row + 1}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row + 2}:H${row + 2}`);
+  worksheet.getCell(`F${row + 2}`).value = '[X] Requested';
+  worksheet.getCell(`F${row + 2}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row + 2}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row + 2}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row + 3}:H${row + 3}`);
+  worksheet.getCell(`F${row + 3}`).value = '(Signature of Applicant)';
+  worksheet.getCell(`F${row + 3}`).font = { name: 'Arial', size: 6.5, italic: true };
+  worksheet.getCell(`F${row + 3}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`F${row + 3}`).border = { bottom: { style: 'thin' } };
+
+  row += 4;
+  // Section 7 header
+  worksheet.mergeCells(`B${row}:H${row}`);
+  worksheet.getCell(`B${row}`).value = '7. DETAILS OF ACTION ON APPLICATION';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 8.5, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCDCDC' } };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  row++;
+  // Section 7A: Certification of Leave Credits
+  const startActionRow = row;
+  const endActionRow = row + 10;
+
+  worksheet.mergeCells(`B${row}:E${row}`);
+  worksheet.getCell(`B${row}`).value = '7A CERTIFICATION OF LEAVE CREDITS';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`B${row + 1}:E${row + 1}`);
+  worksheet.getCell(`B${row + 1}`).value = 'As of _______________';
+  worksheet.getCell(`B${row + 1}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`B${row + 1}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 1}`).border = thinBorder;
+
+  // Leave balance table - properly structured with headers
+  const balanceStartRow = row + 2;
+  worksheet.mergeCells(`B${balanceStartRow}:C${balanceStartRow}`);
+  worksheet.getCell(`B${balanceStartRow}`).value = '';
+  worksheet.getCell(`B${balanceStartRow}`).border = thinBorder;
+
+  worksheet.mergeCells(`D${balanceStartRow}:D${balanceStartRow}`);
+  worksheet.getCell(`D${balanceStartRow}`).value = 'Vacation Leave';
+  worksheet.getCell(`D${balanceStartRow}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`D${balanceStartRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`D${balanceStartRow}`).border = thinBorder;
+
+  worksheet.mergeCells(`E${balanceStartRow}:E${balanceStartRow}`);
+  worksheet.getCell(`E${balanceStartRow}`).value = 'Sick Leave';
+  worksheet.getCell(`E${balanceStartRow}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`E${balanceStartRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`E${balanceStartRow}`).border = thinBorder;
+
+  const balanceLabels = ['Total Earned', 'Less this application', 'Balance'];
+  const vacationBalance = data.vacation_balance || '';
+  const sickBalance = data.sick_balance || '';
+  const daysApplied = parseInt(data.num_days, 10) || 0;
+
+  balanceLabels.forEach((label, idx) => {
+    const currentRow = balanceStartRow + 1 + idx;
+    worksheet.mergeCells(`B${currentRow}:C${currentRow}`);
+    worksheet.getCell(`B${currentRow}`).value = label;
+    worksheet.getCell(`B${currentRow}`).font = { name: 'Arial', size: 7 };
+    worksheet.getCell(`B${currentRow}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`B${currentRow}`).border = thinBorder;
+
+    worksheet.mergeCells(`D${currentRow}:D${currentRow}`);
+    if (idx === 1) {
+      worksheet.getCell(`D${currentRow}`).value = daysApplied;
+      worksheet.getCell(`D${currentRow}`).font = { name: 'Arial', size: 8 };
+      worksheet.getCell(`D${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getCell(`D${currentRow}`).border = thinBorder;
+      worksheet.getCell(`D${currentRow}`).numFmt = '0';
+    } else if (idx === 2) {
+      worksheet.getCell(`D${currentRow}`).value = vacationBalance;
+      worksheet.getCell(`D${currentRow}`).font = { name: 'Arial', size: 8 };
+      worksheet.getCell(`D${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getCell(`D${currentRow}`).border = thinBorder;
+    } else {
+      worksheet.getCell(`D${currentRow}`).value = '';
+      worksheet.getCell(`D${currentRow}`).border = thinBorder;
+    }
+
+    worksheet.mergeCells(`E${currentRow}:E${currentRow}`);
+    if (idx === 1) {
+      worksheet.getCell(`E${currentRow}`).value = daysApplied;
+      worksheet.getCell(`E${currentRow}`).font = { name: 'Arial', size: 8 };
+      worksheet.getCell(`E${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getCell(`E${currentRow}`).border = thinBorder;
+      worksheet.getCell(`E${currentRow}`).numFmt = '0';
+    } else if (idx === 2) {
+      worksheet.getCell(`E${currentRow}`).value = sickBalance;
+      worksheet.getCell(`E${currentRow}`).font = { name: 'Arial', size: 8 };
+      worksheet.getCell(`E${currentRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+      worksheet.getCell(`E${currentRow}`).border = thinBorder;
+    } else {
+      worksheet.getCell(`E${currentRow}`).value = '';
+      worksheet.getCell(`E${currentRow}`).border = thinBorder;
+    }
+  });
+
+  worksheet.mergeCells(`B${endActionRow - 1}:E${endActionRow - 1}`);
+  worksheet.getCell(`B${endActionRow - 1}`).value = 'DAISY A. FABILEÑA';
+  worksheet.getCell(`B${endActionRow - 1}`).font = { name: 'Arial', size: 8, bold: true };
+  worksheet.getCell(`B${endActionRow - 1}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${endActionRow - 1}`).border = { top: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+
+  worksheet.mergeCells(`B${endActionRow}:E${endActionRow}`);
+  worksheet.getCell(`B${endActionRow}`).value = 'AO IV/HRMO';
+  worksheet.getCell(`B${endActionRow}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`B${endActionRow}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${endActionRow}`).border = { bottom: { style: 'thin' }, left: { style: 'thin' }, right: { style: 'thin' } };
+
+  // Section 7B: Recommendation
+  worksheet.mergeCells(`F${row}:H${row}`);
+  worksheet.getCell(`F${row}`).value = '7B RECOMMENDATION';
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row + 1}:H${row + 1}`);
+  worksheet.getCell(`F${row + 1}`).value = '[ ] For approval';
+  worksheet.getCell(`F${row + 1}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`F${row + 1}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row + 1}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row + 2}:H${row + 2}`);
+  worksheet.getCell(`F${row + 2}`).value = '[X] For disapproval due to _______________________';
+  worksheet.getCell(`F${row + 2}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row + 2}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row + 2}`).border = thinBorder;
+
+  row = endActionRow + 1;
+  // Section 7C and 7D
+  worksheet.mergeCells(`B${row}:E${row}`);
+  worksheet.getCell(`B${row}`).value = '7.C APPROVED FOR:';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  worksheet.mergeCells(`B${row + 1}:E${row + 1}`);
+  worksheet.getCell(`B${row + 1}`).value = '_______ days with pay';
+  worksheet.getCell(`B${row + 1}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`B${row + 1}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 1}`).border = thinBorder;
+
+  worksheet.mergeCells(`B${row + 2}:E${row + 2}`);
+  worksheet.getCell(`B${row + 2}`).value = '_______ days without pay';
+  worksheet.getCell(`B${row + 2}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`B${row + 2}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 2}`).border = thinBorder;
+
+  worksheet.mergeCells(`B${row + 3}:E${row + 3}`);
+  worksheet.getCell(`B${row + 3}`).value = '_______ others (Specify)';
+  worksheet.getCell(`B${row + 3}`).font = { name: 'Arial', size: 7 };
+  worksheet.getCell(`B${row + 3}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`B${row + 3}`).border = thinBorder;
+
+  worksheet.mergeCells(`F${row}:H${row}`);
+  worksheet.getCell(`F${row}`).value = '7.D DISAPPROVED DUE TO:';
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 7, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getCell(`F${row}`).border = thinBorder;
+
+  for (let i = 1; i <= 3; i++) {
+    worksheet.mergeCells(`F${row + i}:H${row + i}`);
+    worksheet.getCell(`F${row + i}`).value = '_________________________';
+    worksheet.getCell(`F${row + i}`).font = { name: 'Arial', size: 7 };
+    worksheet.getCell(`F${row + i}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`F${row + i}`).border = thinBorder;
+  }
+
+  row += 6;
+  // Approval signature - centered with proper borders
+  worksheet.mergeCells(`B${row}:H${row}`);
+  worksheet.getCell(`B${row}`).value = 'EDWARD V. SERNADILLA, RPF, DPA / OIC, CENR Officer';
+  worksheet.getCell(`B${row}`).font = { name: 'Arial', size: 9, bold: true };
+  worksheet.getCell(`B${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`B${row}`).border = thinBorder;
+
+  // Set row heights - adjusted for better content fit
+  for (let i = 1; i <= row; i++) {
+    worksheet.getRow(i).height = 18;
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const fileName = `Leave_Application_${(data.full_name || 'Employee').replace(/\s+/g, '_')}.xlsx`;
+  saveAs(blob, fileName);
+};
+
+/**
+ * Generates a Travel Order Excel document matching government format
+ * Uses the same data pipeline as PDF generator for consistency
+ */
+export const generateTravelOrderExcel = async (request, accounts = []) => {
+  const data = buildPdfDataFromRequest(request, accounts);
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet('Travel Order');
+
+  // Page setup for A4 portrait
+  worksheet.pageSetup.paperSize = 9;
+  worksheet.pageSetup.orientation = 'portrait';
+  worksheet.pageSetup.fitToPage = true;
+  worksheet.pageSetup.fitToWidth = 1;
+  worksheet.pageSetup.fitToHeight = 0;
+
+  // Optimized Column Widths (A-H) to prevent clipping
+  worksheet.columns = [
+    { width: 20 }, // A: Left Field Labels (Position/Designation, Departure Date, etc.)
+    { width: 16 }, // B: Left Values (Start)
+    { width: 14 }, // C: Left Values (Mid)
+    { width: 10 }, // D: Left Values (End)
+    { width: 16 }, // E: Right Field Labels (Salary, Office, Arrival Date, Station)
+    { width: 14 }, // F: Right Values (Start)
+    { width: 14 }, // G: Right Values (Mid)
+    { width: 16 }, // H: Right Values / Yellow Badge
+  ];
+
+  // Hide gridlines
+  worksheet.views = [{ showGridLines: false }];
+
+  const thinBorder = {
+    top: { style: 'thin' },
+    left: { style: 'thin' },
+    bottom: { style: 'thin' },
+    right: { style: 'thin' },
+  };
+
+  const grayBottomBorder = {
+    bottom: { style: 'thin', color: { argb: 'FFCCCCCC' } }
+  };
+
+  // 1. Document Header Block
+  // Logo at top-left (Row 1-2)
+  await addDenrLogoToWorksheet(workbook, worksheet, 0, 0, 95, 95);
+
+  // Agency Heading (Center Merged across B to G)
+  worksheet.mergeCells('B1:G1');
+  worksheet.getCell('B1').value = 'Department of Environment and Natural Resources';
+  worksheet.getCell('B1').font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell('B1').alignment = { horizontal: 'center', vertical: 'middle' };
+
+  worksheet.mergeCells('B2:G2');
+  worksheet.getCell('B2').value = 'Community Environment and Natural Resources Office, Olongapo City';
+  worksheet.getCell('B2').font = { name: 'Arial', size: 12 };
+  worksheet.getCell('B2').alignment = { horizontal: 'center', vertical: 'middle' };
+
+  // Tracking Box (Top Right, Column H) - Small, Compact Yellow Badge
+  const travelNo = data.travel_no || data.control_number || '';
+  worksheet.mergeCells('H1:H2');
+  worksheet.getCell('H1').value = travelNo || '';
+  worksheet.getCell('H1').font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell('H1').alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell('H1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+  worksheet.getCell('H1').border = thinBorder;
+  worksheet.getRow(1).height = 20;
+  worksheet.getRow(2).height = 20;
+
+  // Top Red Divider Bar (Row 5 - 2 rows lower than logo/header)
+  worksheet.mergeCells('A7:H7');
+  worksheet.getCell('A7').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFA61C1C' } };
+  worksheet.getRow(7).height = 4;
+
+  let row = 8; // Spacing after red line
+  row += 1;
+
+  // 2. Title Section
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = 'TRAVEL ORDER';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 15, bold: true };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getRow(row).height = 22;
+
+  row += 2;
+
+  // Control Number Subtitle (Centered with bottom underline)
+  const numberText = travelNo || '___________';
+  worksheet.mergeCells(`C${row}:F${row}`);
+  worksheet.getCell(`C${row}`).value = `NO. ${numberText}`;
+  worksheet.getCell(`C${row}`).font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell(`C${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getCell(`C${row}`).border = { bottom: { style: 'thin' } };
+  worksheet.getRow(row).height = 10;
+
+  // 2 Spaces under Title Number
+  row += 5;
+
+  // 3. Key-Value Form Fields Grid
+  const officeLabel = data.office || data.office_department || data.department || 'CENRO';
+
+  // Helper function to build clean form rows with underlines
+  const createFormRow = (rNum, leftLabel, leftVal, rightLabel, rightVal) => {
+    // Left Field Label (Col A)
+    worksheet.getCell(`A${rNum}`).value = leftLabel;
+    worksheet.getCell(`A${rNum}`).font = { name: 'Arial', size: 12 };
+    worksheet.getCell(`A${rNum}`).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Left Field Value (Col B-D)
+    worksheet.mergeCells(`B${rNum}:D${rNum}`);
+    worksheet.getCell(`B${rNum}`).value = leftVal;
+    worksheet.getCell(`B${rNum}`).font = { name: 'Arial', size: 12 };
+    worksheet.getCell(`B${rNum}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`B${rNum}`).border = grayBottomBorder;
+    worksheet.getCell(`C${rNum}`).border = grayBottomBorder;
+    worksheet.getCell(`D${rNum}`).border = grayBottomBorder;
+
+    // Right Field Label (Col E)
+    worksheet.getCell(`E${rNum}`).value = rightLabel;
+    worksheet.getCell(`E${rNum}`).font = { name: 'Arial', size: 12 };
+    worksheet.getCell(`E${rNum}`).alignment = { horizontal: 'left', vertical: 'middle' };
+
+    // Right Field Value (Col F-H)
+    worksheet.mergeCells(`F${rNum}:H${rNum}`);
+    worksheet.getCell(`F${rNum}`).value = rightVal;
+    worksheet.getCell(`F${rNum}`).font = { name: 'Arial', size: 12 };
+    worksheet.getCell(`F${rNum}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getCell(`F${rNum}`).border = grayBottomBorder;
+    worksheet.getCell(`G${rNum}`).border = grayBottomBorder;
+    worksheet.getCell(`H${rNum}`).border = grayBottomBorder;
+
+    worksheet.getRow(rNum).height = 22; // Comfortable line spacing
+  };
+
+  // Row 1: Name & Salary
+  createFormRow(row, 'Name:', data.full_name || '', 'Salary:', data.salary || '');
+  row++;
+
+  // Row 2: Position/Designation & Office
+  createFormRow(row, 'Position/Designation:', data.position || '', 'Office:', officeLabel);
+  row++;
+
+  // Row 3: Departure Date & Arrival Date
+  createFormRow(row, 'Departure Date:', data.departure_date || data.start_date || '', 'Arrival Date:', data.arrival_date || data.end_date || '');
+  row++;
+
+  // Row 4: Destination & Official Station
+  createFormRow(row, 'Destination:', data.destination || '', 'Official Station:', data.official_station || 'Olongapo City');
+  row+=3;
+
+  // Purpose Block - Plain Inline Text
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = `PURPOSE :   ${data.purpose || ''}`;
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(row).height = 22;
+
+  // 2 Spaces under Purpose block
+  row += 3;
+
+  // 4. Travel Terms & Conditions
+  const addTermRow = (rNum, text) => {
+    worksheet.mergeCells(`A${rNum}:H${rNum}`);
+    worksheet.getCell(`A${rNum}`).value = text;
+    worksheet.getCell(`A${rNum}`).font = { name: 'Arial', size: 12 };
+    worksheet.getCell(`A${rNum}`).alignment = { horizontal: 'left', vertical: 'middle' };
+    worksheet.getRow(rNum).height = 20;
+  };
+
+  addTermRow(row, `Per Diems/Expenses Allowed : ${data.per_diems !== false ? 'YES' : 'NO'}`);
+  row++;
+  addTermRow(row, `Assistants or Laborers Allowed : ${data.assistants_allowed ? 'YES' : 'NO'}`);
+  row++;
+  addTermRow(row, `Appropriations to which travel should be charged : ${data.appropriations || 'CDS'}`);
+  row++;
+  addTermRow(row, `Remarks or special instructions : ${data.remarks || 'Gather documentation and prepare the necessary report.'}`);
+
+  // 1 Space under Remarks section
+  row += 3;
+
+  // 5. Certification & Undertaking Statement
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = 'CERTIFICATION / UNDERTAKING:';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(row).height = 20;
+  row++;
+
+  const certText = 'I certify that the above travel is necessary and is related to the official function of the said office. I further certify that the travel is true and correct to the best of my knowledge and that I bind myself to be accountable for any misrepresentation or inappropriate claims in relation to this travel order.\n\nHence, I am recommending for its approval.';
+  worksheet.mergeCells(`A${row}:H${row + 3}`);
+  worksheet.getCell(`A${row}`).value = certText;
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+  worksheet.getRow(row).height = 20;
+  worksheet.getRow(row + 1).height = 20;
+  worksheet.getRow(row + 2).height = 20;
+  worksheet.getRow(row + 3).height = 20;
+  row += 4;
+
+  // 3 spaces below 'hence...'
+  row += 3;
+
+  // 6. Signatures Grid - Middle Approvals Section
+  worksheet.getCell(`A${row}`).value = 'Approved:';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+
+  worksheet.getCell(`E${row}`).value = 'Recommended by:';
+  worksheet.getCell(`E${row}`).font = { name: 'Arial', size: 12 };
+  worksheet.getCell(`E${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(row).height = 20;
+
+  // 3 Blank rows for signature space
+  row += 4;
+
+  // Approver Name
+  worksheet.getCell(`A${row}`).value = 'EDWARD V. SERNADILLA, RPF, DPA';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(row).height = 20;
+  row++;
+
+  // Approver Title
+  worksheet.getCell(`A${row}`).value = 'OI, CENR Officer';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'middle' };
+  worksheet.getRow(row).height = 20;
+
+  // 1 Blank row before thick divider line
+  row += 4;
+
+  // 7. Deduct Authorization Clause & Employee Signature
+  // Thick Divider Line (Row Span A to H)
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).border = { top: { style: 'medium', color: { argb: 'FF000000' } } };
+  worksheet.getRow(row).height = 5;
+  row+=2;
+
+  // Authorization Text
+  const authText = 'I hereby authorize the Accountant to deduct the corresponding amount of the unliquidated cash advance from any succeeding salary for my failure to liquidate this travel within the prescribed thirty-day period upon return to my permanent official station pursuant to item 5.1.3 COA Circular 97-002 dated February 10, 1997 and Sec. 16 EO No. 248 dated May 29, 1995.';
+  worksheet.mergeCells(`A${row}:H${row + 2}`);
+  worksheet.getCell(`A${row}`).value = authText;
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 12 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'left', vertical: 'top', wrapText: true };
+  worksheet.getRow(row).height = 20;
+  worksheet.getRow(row + 1).height = 20;
+  worksheet.getRow(row + 2).height = 20;
+  row += 3;
+
+  // 3 spaces below 'may29,1995'
+  row += 2;
+
+  // Employee Signature (Uppercase, Bold, Right-aligned)
+  worksheet.mergeCells(`F${row}:H${row}`);
+  const employeeNameUpper = (data.full_name || '').toUpperCase();
+  worksheet.getCell(`F${row}`).value = employeeNameUpper;
+  worksheet.getCell(`F${row}`).font = { name: 'Arial', size: 12, bold: true };
+  worksheet.getCell(`F${row}`).alignment = { horizontal: 'right', vertical: 'middle' };
+  worksheet.getRow(row).height = 20;
+  row += 2;
+
+  // 2 spaces below user's name
+  row += 2;
+
+  // 8. Document Footer
+  // Motto (Bold Italic)
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = 'Malinis na Kapaligiran at Mayamang Kalikasan para sa Buong Sambayanan.';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 11, bold: true, italic: true };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getRow(row).height = 18;
+  row++;
+
+  // Address
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = 'Fiscal L.D. Baduria St. Upper Kalaklan, Olongapo City, 2200';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 11 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getRow(row).height = 16;
+  row++;
+
+  // Contact Info
+  worksheet.mergeCells(`A${row}:H${row}`);
+  worksheet.getCell(`A${row}`).value = 'Landline: 047 224 2669 | Email: cenroolongapo@denr.gov.ph | www.r3.denr.gov.ph';
+  worksheet.getCell(`A${row}`).font = { name: 'Arial', size: 11 };
+  worksheet.getCell(`A${row}`).alignment = { horizontal: 'center', vertical: 'middle' };
+  worksheet.getRow(row).height = 16;
+
+  // Save File
+  const buffer = await workbook.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const fileName = `Travel_Order_${(data.full_name || 'Employee').replace(/\s+/g, '_')}.xlsx`;
+  saveAs(blob, fileName);
+};
+
+/**
+ * Unified Excel export function that auto-detects application type
+ * Uses the same data pipeline as PDF generator for consistency
+ */
+export const generateApplicationExcel = async (request, accounts = []) => {
+  try {
+    const requestType = request.request_type || request.details?.request_type;
+    
+    if (requestType === REQUEST_TYPES.TRAVEL) {
+      await generateTravelOrderExcel(request, accounts);
+    } else {
+      await generateLeaveApplicationExcel(request, accounts);
+    }
+  } catch (error) {
+    console.error('Error generating Excel document:', error);
+    throw error;
+  }
 };

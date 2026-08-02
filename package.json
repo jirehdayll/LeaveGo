@@ -17,6 +17,7 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.99.3",
     "@tailwindcss/vite": "^4.2.2",
+    "@turbodocx/html-to-docx": "^1.22.0",
     "autoprefixer": "^10.4.27",
     "chart.js": "^4.5.1",
     "docx": "^9.7.1",
