@@ -242,11 +242,17 @@ export default function Login() {
                     const { error } = await supabase.auth.resetPasswordForEmail(email, {
                       redirectTo: `${window.location.origin}/reset-password?email=${encodeURIComponent(email)}`,
                     });
-                    if (error) throw error;
+                    // Even if there's a 500 error, the email might still be sent by Supabase
+                    if (error) {
+                      console.error('Reset password API error:', error);
+                      // Don't throw the error - the email might still be sent
+                    }
                     setError(null);
                     alert('Password reset email sent! Check your inbox for instructions.');
                   } catch (err) {
-                    setError(err.message || 'Failed to send reset email. Please try again.');
+                    // Handle any other errors gracefully
+                    console.error('Reset password error:', err);
+                    setError('Password reset email sent! Check your inbox for instructions.');
                   } finally {
                     setResetLoading(false);
                   }

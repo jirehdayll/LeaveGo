@@ -14,18 +14,34 @@ if (!import.meta.env.VITE_SUPABASE_URL || !import.meta.env.VITE_SUPABASE_ANON_KE
 }
 
 /**
+ * Singleton Supabase client to prevent multiple instances
+ */
+let supabaseInstance: ReturnType<typeof createClient> | null = null;
+let supabaseServiceRoleInstance: ReturnType<typeof createClient> | null = null;
+
+/**
  * Browser-only Supabase client (anon key). Never put the service role key in Vite —
  * it is embedded in the JS bundle and is a full database bypass.
  *
  * Admin auth operations: Supabase Dashboard → Authentication, or use the Node scripts
  * in /scripts with a local-only env file (see scripts/README.txt).
  */
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = (() => {
+  if (!supabaseInstance) {
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+  }
+  return supabaseInstance;
+})();
 
 /**
  * Service role client for admin operations that need to bypass RLS.
  * WARNING: This client has full database access and should only be used for
  * server-side or trusted admin operations.
  */
-export const supabaseServiceRole = createClient(supabaseUrl, supabaseServiceRoleKey);
+export const supabaseServiceRole = (() => {
+  if (!supabaseServiceRoleInstance) {
+    supabaseServiceRoleInstance = createClient(supabaseUrl, supabaseServiceRoleKey);
+  }
+  return supabaseServiceRoleInstance;
+})();
 

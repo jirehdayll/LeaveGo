@@ -21,7 +21,7 @@ import { MONTHS, REQUEST_STATUS, STATUS_COLORS, REQUEST_TYPES } from '../constan
 import { QRCodeSVG } from 'qrcode.react';
 import { getAllDepartments, getAllPositions } from '../utils/departmentsPositions';
 import { generateApplicationPDF } from '../lib/applicationPDF';
-import { generateApplicationWord } from '../lib/applicationWord';
+import { generateApplicationExcel } from '../lib/excelGenerator';
 
 function StatCard({ icon: Icon, label, value, color, bg, trend, trendValue }) {
   return (
@@ -54,9 +54,9 @@ function RequestCard({ request, onView, isRecent = false, isNewlyApproved = fals
       setDownloading(type);
       if (type === 'pdf') {
         await generateApplicationPDF(request);
-      } else if (type === 'word') {
+      } else if (type === 'excel') {
         // Use the same data preparation as PDF for consistency
-        await generateApplicationWord(request, getAccounts ? getAccounts() : []);
+        await generateApplicationExcel(request, getAccounts ? getAccounts() : []);
       }
     } catch (error) {
       console.error('Error downloading application:', error);
@@ -144,21 +144,23 @@ function RequestCard({ request, onView, isRecent = false, isNewlyApproved = fals
                 <Download className="w-3 h-3" />
               )}
             </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDownload('word');
-              }}
-              disabled={downloading === 'word'}
-              className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors disabled:opacity-50"
-              title="Download Word"
-            >
-              {downloading === 'word' ? (
-                <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <FileSpreadsheet className="w-3 h-3" />
-              )}
-            </button>
+            {!isLeave && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDownload('excel');
+                }}
+                disabled={downloading === 'excel'}
+                className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors disabled:opacity-50"
+                title="Download Excel"
+              >
+                {downloading === 'excel' ? (
+                  <div className="w-3 h-3 border-2 border-slate-600 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <FileSpreadsheet className="w-3 h-3" />
+                )}
+              </button>
+            )}
           </div>
         </div>
       </div>
