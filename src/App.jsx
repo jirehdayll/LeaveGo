@@ -2,6 +2,7 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 
+import Landing from './pages/Landing';
 import Login from './pages/Login';
 import ResetPassword from './pages/ResetPassword';
 import EmployeeDashboard from './pages/EmployeeDashboard';
@@ -74,10 +75,10 @@ function App() {
       <Router>
         <NavigationBlocker />
         <Routes>
-          {/* Public / Landing - Show login if not authenticated, dashboard if authenticated */}
+          {/* Public / Landing - Show landing page if not authenticated, dashboard if authenticated */}
           <Route 
             path={APP_ROUTES.ROOT} 
-            element={!hasSession ? <Login /> : <Navigate to="/dashboard" replace />} 
+            element={!hasSession ? <Landing /> : <Navigate to="/dashboard" replace />} 
           />
 
           {/* Login route - Only show if not authenticated */}

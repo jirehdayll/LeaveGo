@@ -146,6 +146,7 @@ export default function AdminDashboard() {
     showCommentInput: false
   });
   const [actionLoading, setActionLoading] = useState(false);
+  const [downloadingPending, setDownloadingPending] = useState(false);
   
   const now = new Date();
   const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()];
@@ -384,6 +385,33 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleDownloadPendingTravel = async (type) => {
+    try {
+      setDownloadingPending(true);
+      
+      // Filter only pending travel forms
+      const pendingTravelForms = pending.filter(req => req.request_type === REQUEST_TYPES.TRAVEL);
+      
+      if (pendingTravelForms.length === 0) {
+        alert('No pending travel forms to download.');
+        return;
+      }
+
+      if (type === 'excel') {
+        const { generatePendingTravelExcel } = await import('../lib/pendingTravelGenerator');
+        await generatePendingTravelExcel(pendingTravelForms);
+      } else if (type === 'pdf') {
+        const { generatePendingTravelPDF } = await import('../lib/pendingTravelPDF');
+        await generatePendingTravelPDF(pendingTravelForms);
+      }
+    } catch (error) {
+      console.error('Error downloading pending travel forms:', error);
+      alert('Failed to download pending travel forms. Please try again.');
+    } finally {
+      setDownloadingPending(false);
+    }
+  };
+
   const archiveRequest = async (id) => {
     if (!window.confirm('Are you sure you want to archive this request?')) {
       return;
@@ -514,6 +542,32 @@ export default function AdminDashboard() {
             <div>
               <h3 className="font-bold text-slate-800">Pending Applications</h3>
               <p className="text-xs text-slate-400 mt-0.5">{pending.length} application{pending.length !== 1 ? 's' : ''} awaiting review ({unseenPending} unseen)</p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => handleDownloadPendingTravel('excel')}
+                disabled={downloadingPending}
+                className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {downloadingPending ? (
+                  <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                Excel
+              </button>
+              <button
+                onClick={() => handleDownloadPendingTravel('pdf')}
+                disabled={downloadingPending}
+                className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+              >
+                {downloadingPending ? (
+                  <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                PDF
+              </button>
             </div>
           </div>
 
