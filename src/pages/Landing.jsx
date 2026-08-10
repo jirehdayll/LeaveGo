@@ -32,7 +32,7 @@ import { DashboardPreview } from '../components/DashboardPreview';
 const navLinks = [
   { label: 'Home', href: '#top' },
   { label: 'Features', href: '#features' },
-  { label: 'About', href: '#about' },
+  { label: 'About', href: '#benefits' },
   { label: 'Contact', href: '#contact' },
 ];
 
@@ -157,12 +157,12 @@ const securityPoints = [
   { icon: Lock, label: 'Protected records' },
 ];
 
-function SectionHeading({ eyebrow, title, body, center = false }) {
+function SectionHeading({ eyebrow, title, body, center = false, bodyClassName = '', darkMode = false }) {
   return (
     <div className={center ? 'mx-auto max-w-2xl text-center' : 'max-w-2xl'}>
-      <p className="eyebrow text-emerald-900">{eyebrow}</p>
-      <h2 className="mt-4 text-3xl font-extrabold sm:text-4xl">{title}</h2>
-      {body ? <p className="mt-4 leading-relaxed text-slate-600">{body}</p> : null}
+      <p className={`eyebrow ${darkMode ? 'text-emerald-300' : 'text-emerald-900'}`}>{eyebrow}</p>
+      <h2 className={`mt-4 text-3xl font-extrabold sm:text-4xl ${darkMode ? 'text-emerald-100' : ''}`}>{title}</h2>
+      {body ? <p className={`mt-4 leading-relaxed ${bodyClassName || (darkMode ? 'text-emerald-200' : 'text-slate-600')}`}>{body}</p> : null}
     </div>
   );
 }
@@ -200,8 +200,8 @@ function Button({ variant = 'default', size = 'default', className = '', childre
 
 function Landing() {
   return (
-    <div className="min-h-screen scroll-smooth bg-gradient-to-br from-slate-50 to-emerald-300">
-      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur">
+    <div className="min-h-screen scroll-smooth bg-gradient-to-br from-slate-900 to-emerald-800">
+      <header className="sticky top-0 z-50 border-b border-slate-200 bg-white/85 backdrop-blur">  
         <nav className="mx-auto flex h-16 max-w-6xl items-center gap-4 px-5 sm:px-6">
           <a href="#top" className="flex items-center gap-3">
             <img src="/logo.png" alt="DENR Logo" className="size-9 rounded-xl" />
@@ -216,7 +216,7 @@ function Landing() {
               <a
                 key={link.label}
                 href={link.href}
-                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-emerald-300 hover:text-emerald-950"
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:bg-emerald-700 hover:text-white"
               >
                 {link.label}
               </a>
@@ -255,25 +255,27 @@ function Landing() {
         </section>
 
         {/* Features */}
-        <section id="features" className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-24">
-          <SectionHeading center eyebrow="Features" title="Everything you need." />
-          <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+        <section id="features" className="bg-gradient-to-b from-emerald-800 to-emerald-900 py-20 lg:py-24">
+          <div className="mx-auto max-w-6xl px-5 sm:px-6">
+            <SectionHeading center darkMode eyebrow="Features" title="Everything you need." />
+            <div className="mt-14 grid gap-6 md:grid-cols-2 lg:grid-cols-4">
             {features.map(({ icon: Icon, title, body }) => (
-              <div key={title} className="rounded-3xl border border-slate-200 bg-white p-6 shadow-md">
+              <div key={title} className="rounded-3xl border border-emerald-700 bg-emerald-900/50 p-6 shadow-md">
                 <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-500 text-emerald-950">
                   <Icon className="size-5" />
                 </span>
-                <h3 className="mt-4 text-lg font-extrabold">{title}</h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
+                <h3 className="mt-4 text-lg font-extrabold text-emerald-100">{title}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-emerald-200">{body}</p>
               </div>
             ))}
+            </div>
           </div>
         </section>
 
         {/* How It Works */}
-        <section className="bg-gradient-to-b from-emerald-400 to-white py-20 lg:py-24">
+        <section className="bg-gradient-to-b from-emerald-800 to-emerald-950 py-20 lg:py-24">
           <div className="mx-auto max-w-6xl px-5 sm:px-6">
-            <SectionHeading center eyebrow="How It Works" title="Simple 4-step process." />
+            <SectionHeading center darkMode eyebrow="How It Works" title="Simple 4-step process." />
             <div className="mt-14 grid gap-8 md:grid-cols-4">
               {steps.map(({ n, icon: Icon, title, body }) => (
                 <div key={n} className="relative">
@@ -284,8 +286,8 @@ function Landing() {
                     <span className="flex size-8 items-center justify-center rounded-lg bg-emerald-500 text-emerald-950">
                       <Icon className="size-4" />
                     </span>
-                    <h3 className="mt-3 text-lg font-extrabold">{title}</h3>
-                    <p className="mt-2 text-sm leading-relaxed text-slate-600">{body}</p>
+                    <h3 className="mt-3 text-lg font-extrabold text-emerald-100">{title}</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-emerald-100">{body}</p>
                   </div>
                 </div>
               ))}
@@ -294,20 +296,20 @@ function Landing() {
         </section>
 
         {/* Roles */}
-        <section id="roles" className="bg-gradient-to-b from-emerald-300 to-white py-20 lg:py-24">
+        <section id="roles" className="bg-gradient-to-b from-emerald-800 to-emerald-950 py-20 lg:py-24">
           <div className="mx-auto max-w-6xl px-5 sm:px-6">
-            <SectionHeading center eyebrow="Roles" title="Built for every user." />
+            <SectionHeading center darkMode eyebrow="Roles" title="Built for every user." />
             <div className="mt-14 grid gap-6 md:grid-cols-3">
               {roles.map(({ icon: Icon, title, items }) => (
-                <div key={title} className="rounded-3xl border border-slate-200 bg-white p-8 shadow-md">
+                <div key={title} className="rounded-3xl border border-emerald-700 bg-emerald-900/50 p-8 shadow-md">
                   <span className="flex size-10 items-center justify-center rounded-full bg-emerald-950 font-display text-sm font-bold text-white">
                     <Icon className="size-5.5" />
                   </span>
-                  <h3 className="mt-5 text-xl font-extrabold">{title}</h3>
+                  <h3 className="mt-5 text-xl font-extrabold text-emerald-100">{title}</h3>
                   <ul className="mt-5 space-y-3">
                     {items.map((i) => (
-                      <li key={i} className="flex items-start gap-2 text-sm text-slate-600">
-                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-800" />
+                      <li key={i} className="flex items-start gap-2 text-sm text-emerald-100">
+                        <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-emerald-400" />
                         {i}
                       </li>
                     ))}
@@ -319,9 +321,10 @@ function Landing() {
         </section>
 
         {/* Benefits */}
-        <section className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-24">
-          <SectionHeading center eyebrow="Why Use LeaveGo" title="Built for how the office works." />
-          <div className="mt-14 grid gap-6 md:grid-cols-3">
+        <section id="benefits" className="bg-gradient-to-b from-emerald-900 to-emerald-950 py-20 lg:py-24">
+          <div className="mx-auto max-w-6xl px-5 sm:px-6">
+            <SectionHeading center darkMode eyebrow="Why Use LeaveGo" title="Built for how the office works." />
+            <div className="mt-14 grid gap-6 md:grid-cols-3">
             {benefits.map(({ icon: Icon, title, body }) => (
               <div
                 key={title}
@@ -330,24 +333,25 @@ function Landing() {
                 <span className="flex size-12 items-center justify-center rounded-2xl bg-white/10 text-white">
                   <Icon className="size-5.5" />
                 </span>
-                <h3 className="mt-6 text-xl font-extrabold">{title}</h3>
+                <h3 className="mt-6 text-xl font-extrabold text-emerald-100">{title}</h3>
                 <p className="mt-3 text-sm leading-relaxed text-white/75">{body}</p>
               </div>
             ))}
+            </div>
           </div>
         </section>
 
         {/* Highlights */}
-        <section className="bg-gradient-to-b from-emerald-400 to-white py-20 lg:py-24">
+        <section className="bg-gradient-to-b from-emerald-800 to-emerald-950 py-20 lg:py-24">
           <div className="mx-auto max-w-6xl px-5 sm:px-6">
-            <SectionHeading center eyebrow="System Highlights" title="Capabilities at a glance." />
+            <SectionHeading center darkMode eyebrow="System Highlights" title="Capabilities at a glance." />
             <div className="mt-12 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {highlights.map(({ icon: Icon, label }) => (
                 <div
                   key={label}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-semibold shadow-md"
+                  className="flex items-center gap-3 rounded-2xl border border-emerald-700 bg-emerald-900/50 px-5 py-4 text-sm font-semibold text-emerald-100 shadow-md"
                 >
-                  <Icon className="size-4.5 shrink-0 text-emerald-800" />
+                  <Icon className="size-4.5 shrink-0 text-emerald-400" />
                   {label}
                 </div>
               ))}
@@ -356,25 +360,25 @@ function Landing() {
         </section>
 
         {/* Security */}
-        <section id="security" className="mx-auto max-w-6xl px-5 py-20 sm:px-6 lg:py-24">
-          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
-            <div>
-              <SectionHeading
-                eyebrow="Security & Privacy"
-                title="Secure and reliable."
-                body="LeaveGo protects employee information through secure authentication, role-based access control, and compliance with organizational data management practices. The system is designed to support responsible handling of records in accordance with applicable data privacy requirements."
-              />
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+        <section id="security" className="bg-gradient-to-b from-emerald-900 to-emerald-950 py-20 lg:py-24">
+          <div className="mx-auto max-w-6xl px-5 sm:px-6">
+            <SectionHeading
+              darkMode
+              center
+              eyebrow="Security & Privacy"
+              title="Secure and reliable."
+              body="LeaveGo protects employee information through secure authentication, role-based access control, and compliance with organizational data management practices. The system is designed to support responsible handling of records in accordance with applicable data privacy requirements."
+            />
+            <div className="mt-14 grid gap-4 sm:grid-cols-2">
               {securityPoints.map(({ icon: Icon, label }) => (
                 <div
                   key={label}
-                  className="rounded-2xl border border-slate-200 bg-white p-6 shadow-md"
+                  className="rounded-2xl border border-emerald-700 bg-emerald-900/50 p-6 shadow-md"
                 >
                   <span className="flex size-10 items-center justify-center rounded-xl bg-emerald-500 text-emerald-950">
                     <Icon className="size-4.5" />
                   </span>
-                  <p className="mt-4 text-sm font-semibold">{label}</p>
+                  <p className="mt-4 text-sm font-semibold text-emerald-100">{label}</p>
                 </div>
               ))}
             </div>
@@ -383,7 +387,7 @@ function Landing() {
 
         {/* CTA */}
         <section id="login" className="mx-auto max-w-6xl px-5 pb-24 sm:px-6">
-          <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900 to-emerald-950 px-8 py-16 text-center text-white shadow-xl">
+          <div className="relative mt-12 overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-900 to-emerald-950 px-8 py-16 text-center text-white shadow-xl">
             <div className="absolute inset-0 bg-[radial-gradient(50%_60%_at_50%_0%,rgba(255,255,255,0.1),transparent)]" />
             <div className="relative">
               <h2 className="text-3xl font-extrabold sm:text-4xl">Ready to Access LeaveGo?</h2>
@@ -405,14 +409,14 @@ function Landing() {
         </section>
       </main>
 
-      <footer id="contact" className="border-t border-slate-200 bg-gradient-to-b from-emerald-400 to-white">
+      <footer id="contact" className="border-t border-emerald-700 bg-gradient-to-b from-emerald-900 to-emerald-950">
         <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-6 md:grid-cols-4">
           <div className="md:col-span-2">
             <div className="flex items-center gap-3">
               <img src="/logo.png" alt="LeaveGo Logo" className="size-9 rounded-xl" />
-              <span className="font-display text-lg font-extrabold text-emerald-950">LeaveGo</span>
+              <span className="font-display text-lg font-extrabold text-emerald-100">LeaveGo</span>
             </div>
-            <p className="mt-5 max-w-sm text-sm leading-relaxed text-slate-600">
+            <p className="mt-5 max-w-sm text-sm leading-relaxed text-emerald-100">
               Department of Environment and Natural Resources
               <br />
               Community Environment and Natural Resources Office (CENRO) Olongapo
@@ -422,19 +426,19 @@ function Landing() {
           </div>
 
           <div>
-            <p className="eyebrow text-slate-900">Contact</p>
-            <ul className="mt-5 space-y-3 text-sm text-slate-600">
+            <p className="eyebrow text-emerald-100">Contact</p>
+            <ul className="mt-5 space-y-3 text-sm text-emerald-200">
               <li className="flex items-start gap-2">
-                <MapPin className="mt-0.5 size-4 shrink-0 text-emerald-800" />
+                <MapPin className="mt-0.5 size-4 shrink-0 text-emerald-400" />
                 CENRO Olongapo, Zambales
               </li>
               <li className="flex items-start gap-2">
-                <Phone className="mt-0.5 size-4 shrink-0 text-emerald-800" />
+                <Phone className="mt-0.5 size-4 shrink-0 text-emerald-400" />
                 (047) 000-0000
               </li>
               <li className="flex items-start gap-2">
-                <Mail className="mt-0.5 size-4 shrink-0 text-emerald-800" />
-                <a href="mailto:it@denr.gov.ph" className="transition-colors hover:text-slate-900">
+                <Mail className="mt-0.5 size-4 shrink-0 text-emerald-400" />
+                <a href="mailto:it@denr.gov.ph" className="transition-colors hover:text-emerald-100">
                   it@denr.gov.ph
                 </a>
               </li>
@@ -442,32 +446,32 @@ function Landing() {
           </div>
 
           <div>
-            <p className="eyebrow text-slate-900">System</p>
-            <ul className="mt-5 space-y-3 text-sm text-slate-600">
+            <p className="eyebrow text-emerald-100">System</p>
+            <ul className="mt-5 space-y-3 text-sm text-emerald-200">
               <li>
-                <a href="#features" className="transition-colors hover:text-slate-900">
+                <a href="#features" className="transition-colors hover:text-emerald-100">
                   Features
                 </a>
               </li>
               <li>
-                <a href="#security" className="transition-colors hover:text-slate-900">
+                <a href="#security" className="transition-colors hover:text-emerald-100">
                   Privacy Policy
                 </a>
               </li>
               <li>
-                <a href="#security" className="transition-colors hover:text-slate-900">
+                <a href="#security" className="transition-colors hover:text-emerald-100">
                   Terms of Use
                 </a>
               </li>
               <li>
-                <Link to="/login" className="transition-colors hover:text-slate-900">
+                <Link to="/login" className="transition-colors hover:text-emerald-100">
                   Login
                 </Link>
               </li>
             </ul>
           </div>
         </div>
-        <div className="border-t border-slate-200 px-5 py-6 text-center text-xs text-slate-500 sm:px-6">
+        <div className="border-t border-emerald-700 px-5 py-6 text-center text-xs text-emerald-300 sm:px-6">
           © 2026 LeaveGo System · DENR CENRO Olongapo. Powered by DENR IT.
         </div>
       </footer>
