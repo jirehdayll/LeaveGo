@@ -8,6 +8,7 @@ export const DEFAULT_ACCOUNT_IDS = {
   admin: 'a0000000-0000-4000-8000-000000000001',
   employee: 'a0000000-0000-4000-8000-000000000002',
   cenro: 'a0000000-0000-4000-8000-000000000003',
+  penro: 'a0000000-0000-4000-8000-000000000004',
 } as const;
 
 const DEFAULT_ACCOUNTS = [
@@ -40,6 +41,17 @@ const DEFAULT_ACCOUNTS = [
     role: 'cenro',
     fullName: 'CENRO User',
     full_name: 'CENRO User',
+    is_active: true,
+    isActive: true,
+    createdAt: '2020-01-01T00:00:00.000Z',
+  },
+  {
+    id: DEFAULT_ACCOUNT_IDS.penro,
+    email: 'penro@denr.gov.ph',
+    password: 'penro',
+    role: 'penro',
+    fullName: 'PENRO Officer',
+    full_name: 'PENRO Officer',
     is_active: true,
     isActive: true,
     createdAt: '2020-01-01T00:00:00.000Z',

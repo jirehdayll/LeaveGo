@@ -6,6 +6,7 @@ export function normalizeRole(role) {
   const r = String(role).toLowerCase();
   if (r === USER_ROLES.SUPER_ADMIN) return USER_ROLES.SUPER_ADMIN;
   if (r === USER_ROLES.ADMIN) return USER_ROLES.ADMIN;
+  if (r === USER_ROLES.PENRO) return USER_ROLES.PENRO;
   if (r === USER_ROLES.CENRO) return USER_ROLES.CENRO;
   return USER_ROLES.EMPLOYEE;
 }
@@ -31,12 +32,16 @@ export function canAccessAdmin(role, isActive = true) {
   if (!isActive) return false;
   return (
     role === USER_ROLES.ADMIN ||
+    role === USER_ROLES.PENRO ||
     role === USER_ROLES.CENRO ||
     role === USER_ROLES.SUPER_ADMIN
   );
 }
 
 export function getDefaultRouteForRole(role) {
+  if (role === USER_ROLES.PENRO) {
+    return APP_ROUTES.PENRO_DASHBOARD;
+  }
   if (
     role === USER_ROLES.ADMIN ||
     role === USER_ROLES.CENRO ||

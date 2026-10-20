@@ -11,6 +11,7 @@ import TravelForm from './pages/TravelForm';
 import FormSuccessful from './pages/FormSuccessful';
 
 import AdminDashboard from './pages/AdminDashboard';
+import PenroDashboard from './pages/PenroDashboard';
 import ApprovedForms from './pages/ApprovedForms';
 import Archive from './pages/Archive';
 import MonthlySummary from './pages/MonthlySummary';
@@ -19,7 +20,7 @@ import Records from './pages/Records';
 import ScannedProfileView from './pages/ScannedProfileView';
 import LeaveBalanceDebug from './pages/LeaveBalanceDebug';
 
-import { ProtectedRoute, AdminRoute } from './components/ProtectedRoute';
+import { ProtectedRoute, AdminRoute, PenroRoute } from './components/ProtectedRoute';
 import { APP_ROUTES } from './constants';
 import { useHistoryBlockerWithSessionCheck } from './hooks/useHistoryBlocker';
 import { LeaveBalanceProvider } from './contexts/LeaveBalanceContext';
@@ -78,11 +79,34 @@ function App() {
           {/* Public / Landing - Show landing page if not authenticated, dashboard if authenticated */}
           <Route 
             path={APP_ROUTES.ROOT} 
-            element={!hasSession ? <Landing /> : <Navigate to="/dashboard" replace />} 
+            element={
+              !hasSession ? (
+                <Landing />
+              ) : user?.role === 'penro' ? (
+                <Navigate to="/penro/dashboard" replace />
+              ) : user?.role === 'admin' || user?.role === 'cenro' ? (
+                <Navigate to="/admin/dashboard" replace />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
+            } 
           />
 
           {/* Login route - Only show if not authenticated */}
-          <Route path={APP_ROUTES.LOGIN} element={!hasSession ? <Login /> : <Navigate to="/dashboard" replace />} />
+          <Route 
+            path={APP_ROUTES.LOGIN} 
+            element={
+              !hasSession ? (
+                <Login />
+              ) : user?.role === 'penro' ? (
+                <Navigate to="/penro/dashboard" replace />
+              ) : user?.role === 'admin' || user?.role === 'cenro' ? (
+                <Navigate to="/admin/dashboard" replace />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
+            } 
+          />
 
           {/* Password recovery from email (public) */}
           <Route path={APP_ROUTES.RESET_PASSWORD} element={<ResetPassword />} />
@@ -93,6 +117,9 @@ function App() {
           <Route path="/forms/travel" element={<ProtectedRoute><TravelForm /></ProtectedRoute>} />
           <Route path="/success" element={<ProtectedRoute><FormSuccessful /></ProtectedRoute>} />
           <Route path="/debug/balance" element={<ProtectedRoute><LeaveBalanceDebug /></ProtectedRoute>} />
+
+          {/* PENRO Route - Dashboard page only */}
+          <Route path={APP_ROUTES.PENRO_DASHBOARD} element={<PenroRoute><PenroDashboard /></PenroRoute>} />
 
           {/* Admin Routes - Protected and require admin role */}
           <Route path={APP_ROUTES.ADMIN_DASHBOARD} element={<AdminRoute><AdminDashboard /></AdminRoute>} />
@@ -105,7 +132,20 @@ function App() {
           <Route path="/debug/balance" element={<ProtectedRoute><LeaveBalanceDebug /></ProtectedRoute>} />
           <Route path="/profile/view/:id" element={<ScannedProfileView />} />
 
-          <Route path="*" element={<Navigate to={!hasSession ? APP_ROUTES.LOGIN : "/dashboard"} replace />} />
+          <Route 
+            path="*" 
+            element={
+              !hasSession ? (
+                <Navigate to={APP_ROUTES.LOGIN} replace />
+              ) : user?.role === 'penro' ? (
+                <Navigate to="/penro/dashboard" replace />
+              ) : user?.role === 'admin' || user?.role === 'cenro' ? (
+                <Navigate to="/admin/dashboard" replace />
+              ) : (
+                <Navigate to="/dashboard" replace />
+              )
+            } 
+          />
         </Routes>
       </Router>
     </LeaveBalanceProvider>

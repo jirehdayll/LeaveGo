@@ -8,7 +8,7 @@ import { userEmailService } from '../services/userEmailService';
 import {
   UserPlus, Search, Shield, User,
   Mail, Briefcase, Loader2, Power, XCircle,
-  AlertCircle, Pencil, KeyRound, CheckCircle2, Trash2, Eye, EyeOff, Settings, Plus, Building, UserCog, Send
+  AlertCircle, Pencil, KeyRound, CheckCircle2, Trash2, Eye, EyeOff, Settings, Plus, Building, UserCog, Send, Lock
 } from 'lucide-react';
 
 // ─── Email Masking Utility ─────────────────────────────────────────────────────
@@ -509,6 +509,7 @@ function CreateAccountModal({ onClose, onSuccess }) {
             onChange={e => set('role', e.target.value)}>
             <option value={USER_ROLES.EMPLOYEE}>Employee</option>
             <option value={USER_ROLES.ADMIN}>Administrator</option>
+            <option value={USER_ROLES.PENRO}>PENRO</option>
           </select>
         </Field>
         <SubmitButton loading={loading} label="Create Account" loadingLabel="Creating…"
@@ -527,6 +528,14 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetSuccess, setResetSuccess] = useState(false);
+  // Direct password setting state
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false);
+  const [setPasswordLoading, setSetPasswordLoading] = useState(false);
+  const [setPasswordSuccess, setSetPasswordSuccess] = useState(false);
+  const [passwordError, setPasswordError] = useState(null);
   const [customDepartments, setCustomDepartments] = useState(() => {
     const saved = localStorage.getItem('customDepartments');
     return saved ? JSON.parse(saved) : [];
@@ -549,6 +558,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
     position: account.position || POSITIONS[0] || '',
     department: account.department || '',
     employeeType: account.employee_type || EMPLOYEE_TYPES[0] || 'Regular',
+    role: account.role || USER_ROLES.EMPLOYEE,
     is_active: account.is_active !== false && account.isActive !== false
   });
 
@@ -570,7 +580,6 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
       });
 
       if (resetError) {
-        // Check if it's a development environment issue
         if (resetError.message?.includes('Email') || resetError.message?.includes('SMTP')) {
           setError('Password reset email could not be sent. Please ensure email service is configured in Supabase.');
         } else {
@@ -584,6 +593,59 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
       setError('Failed to send password reset email. Please check your Supabase email configuration.');
     } finally {
       setResetLoading(false);
+    }
+  };
+
+  // Directly set a password for the account via Supabase Admin API (service role)
+  const handleSetPasswordDirectly = async () => {
+    setPasswordError(null);
+    setSetPasswordSuccess(false);
+
+    if (!newPassword) {
+      setPasswordError('Please enter a new password.');
+      return;
+    }
+    if (newPassword.length < 6) {
+      setPasswordError('Password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmNewPassword) {
+      setPasswordError('Passwords do not match.');
+      return;
+    }
+
+    setSetPasswordLoading(true);
+    try {
+      // Use Supabase service role to update password by user id
+      const { supabaseServiceRole } = await import('../lib/supabaseClient');
+      const userId = account.supabase_uid || account.id;
+
+      if (!userId) {
+        setPasswordError('Cannot identify this account\'s Supabase user ID. Try sending a reset email instead.');
+        return;
+      }
+
+      const { error: updateErr } = await supabaseServiceRole.auth.admin.updateUserById(userId, {
+        password: newPassword,
+      });
+
+      if (updateErr) throw updateErr;
+
+      // Also update local accountStore password
+      const existingAccounts = JSON.parse(localStorage.getItem('userAccounts') || '[]');
+      const updatedAccounts = existingAccounts.map(acc =>
+        String(acc.id) === String(account.id) ? { ...acc, password: newPassword } : acc
+      );
+      localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
+
+      setSetPasswordSuccess(true);
+      setNewPassword('');
+      setConfirmNewPassword('');
+      setTimeout(() => setSetPasswordSuccess(false), 5000);
+    } catch (err) {
+      setPasswordError(err.message || 'Failed to set password. Check your Supabase service role key.');
+    } finally {
+      setSetPasswordLoading(false);
     }
   };
 
@@ -621,6 +683,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
             position: formData.position,
             department: formData.department,
             employee_type: formData.employeeType,
+            role: formData.role,
             is_active: formData.is_active,
             isActive: formData.is_active
           };
@@ -647,6 +710,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
         .update({
           position: formData.position,
           department: formData.department,
+          role: formData.role,
           is_active: formData.is_active,
           updated_at: new Date().toISOString()
         })
@@ -681,7 +745,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
   return (
     <>
       <Modal title="Edit Account" subtitle={`Editing: ${account.full_name || account.denr_email}`} onClose={onClose}>
-        <div className="p-7 space-y-5">
+        <div className="p-7 space-y-5 overflow-y-auto max-h-[80vh]">
           {error   && <ErrorBanner   message={error}   />}
           {resetSuccess && <SuccessBanner message="Password reset email sent successfully." />}
 
@@ -705,7 +769,7 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
               </Field>
             </div>
 
-            {/* Organizational Metadata - Editable */}
+            {/* Organizational Metadata - Editable (role changes do NOT require password) */}
             <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4">
               <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-3">Organizational Metadata</p>
               <Field label="Position">
@@ -734,33 +798,100 @@ function EditAccountModal({ account, onClose, onSuccess, updateAccounts }) {
                   ))}
                 </select>
               </Field>
+              <Field label="Role">
+                <select className={inputCls} value={formData.role}
+                  onChange={e => set('role', e.target.value)}>
+                  <option value={USER_ROLES.EMPLOYEE}>Employee</option>
+                  <option value={USER_ROLES.ADMIN}>Administrator</option>
+                  <option value={USER_ROLES.PENRO}>PENRO</option>
+                </select>
+              </Field>
             </div>
 
-            {/* Password Reset Section */}
-            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-              <div className="flex items-start gap-3">
-                <KeyRound className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-                <div className="flex-1">
-                  <p className="text-sm font-semibold text-blue-800 mb-1">Password Management</p>
-                  <p className="text-xs text-blue-600 mb-3">
-                    Send a secure password reset link to the user's email. They will set their own password.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={handlePasswordReset}
-                    disabled={resetLoading}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                    {resetLoading ? 'Sending...' : 'Send Password Reset Link'}
-                  </button>
-                </div>
-              </div>
-            </div>
-            
             <SubmitButton loading={loading} label="Save Changes" loadingLabel="Saving…"
               icon={<Pencil className="w-4 h-4" />} />
           </form>
+
+          {/* ── Password Management Section (independent of Save Changes) ── */}
+          <div className="border-t border-slate-100 pt-4 space-y-3">
+            <div className="flex items-center gap-2">
+              <KeyRound className="w-4 h-4 text-slate-500" />
+              <p className="text-sm font-bold text-slate-700">Password Management</p>
+            </div>
+            <p className="text-xs text-slate-500">
+              Password management is optional and independent from saving other account details. Changing the role or any other field above does <strong>not</strong> require a password change.
+            </p>
+
+            {/* Option A: Send reset email */}
+            <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-blue-800 mb-1">Option A — Send Reset Link via Email</p>
+              <p className="text-xs text-blue-600 mb-3">User will receive an email with a secure link to set their own password.</p>
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={resetLoading}
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {resetLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                {resetLoading ? 'Sending...' : 'Send Password Reset Link'}
+              </button>
+            </div>
+
+            {/* Option B: Set password directly */}
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-800 mb-1">Option B — Set Password Directly</p>
+              <p className="text-xs text-amber-600 mb-3">Admin sets a new password for this account immediately.</p>
+              {passwordError && <ErrorBanner message={passwordError} />}
+              {setPasswordSuccess && <SuccessBanner message="Password updated successfully!" />}
+              <div className="space-y-3 mt-2">
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type={showNewPassword ? 'text' : 'password'}
+                    value={newPassword}
+                    onChange={e => { setNewPassword(e.target.value); setPasswordError(null); }}
+                    placeholder="New password (min. 6 characters)"
+                    autoComplete="new-password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-amber-200 bg-white text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowNewPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                  <input
+                    type={showConfirmNewPassword ? 'text' : 'password'}
+                    value={confirmNewPassword}
+                    onChange={e => { setConfirmNewPassword(e.target.value); setPasswordError(null); }}
+                    placeholder="Confirm new password"
+                    autoComplete="new-password"
+                    className="w-full pl-10 pr-10 py-2.5 rounded-xl border border-amber-200 bg-white text-sm focus:ring-2 focus:ring-amber-400 outline-none transition"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmNewPassword(v => !v)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    {showConfirmNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSetPasswordDirectly}
+                  disabled={setPasswordLoading || !newPassword}
+                  className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-semibold transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {setPasswordLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <KeyRound className="w-4 h-4" />}
+                  {setPasswordLoading ? 'Setting Password...' : 'Set Password Now'}
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </Modal>
 
@@ -844,9 +975,12 @@ function AccountCard({ acc, isAdmin, onToggle, onEdit, onDelete }) {
   const displayName = acc.full_name || acc.name || acc.email || 'Unknown';
   const initial = displayName.charAt(0).toUpperCase();
   
-  const accent = isAdmin 
-    ? { bg: 'bg-purple-100', text: 'text-purple-700' }
-    : { bg: 'bg-blue-100', text: 'text-blue-700' };
+  const isPenroAccount = String(acc.role || '').toLowerCase() === 'penro';
+  const accent = isPenroAccount
+    ? { bg: 'bg-amber-100', text: 'text-amber-800' }
+    : isAdmin 
+      ? { bg: 'bg-purple-100', text: 'text-purple-700' }
+      : { bg: 'bg-blue-100', text: 'text-blue-700' };
 
   const active = acc.is_active !== false && acc.isActive !== false;
 
@@ -1071,8 +1205,13 @@ export default function AccountManagement() {
     acc.email?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const admins    = filtered.filter(a => a.role === USER_ROLES.ADMIN || a.role === USER_ROLES.CENRO);
-  const employees = filtered.filter(a => a.role !== USER_ROLES.ADMIN && a.role !== USER_ROLES.CENRO);
+  const isRoleAdmin = (r) => {
+    const role = String(r || '').toLowerCase();
+    return role === USER_ROLES.ADMIN || role === USER_ROLES.PENRO || role === 'penro' || role === USER_ROLES.CENRO || role === 'cenro' || role === USER_ROLES.SUPER_ADMIN;
+  };
+
+  const admins    = filtered.filter(a => isRoleAdmin(a.role));
+  const employees = filtered.filter(a => !isRoleAdmin(a.role));
 
   return (
     <AdminLayout>

@@ -273,7 +273,7 @@ function Landing() {
         </section>
 
         {/* How It Works */}
-        <section className="bg-gradient-to-b from-emerald-800 to-emerald-950 py-20 lg:py-24">
+        <section id="about" className="scroll-mt-16 bg-gradient-to-b from-emerald-400 to-white py-20 lg:py-24">
           <div className="mx-auto max-w-6xl px-5 sm:px-6">
             <SectionHeading center darkMode eyebrow="How It Works" title="Simple 4-step process." />
             <div className="mt-14 grid gap-8 md:grid-cols-4">

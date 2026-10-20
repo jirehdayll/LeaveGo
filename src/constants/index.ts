@@ -3,7 +3,9 @@
 export const USER_ROLES = {
   ADMIN: 'admin',
   EMPLOYEE: 'employee',
-  SUPER_ADMIN: 'super_admin'
+  SUPER_ADMIN: 'super_admin',
+  PENRO: 'penro',
+  CENRO: 'cenro'
 } as const;
 
 export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];
@@ -11,7 +13,9 @@ export type UserRole = typeof USER_ROLES[keyof typeof USER_ROLES];
 export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
   [USER_ROLES.ADMIN]: 'Administrator',
   [USER_ROLES.EMPLOYEE]: 'Employee',
-  [USER_ROLES.SUPER_ADMIN]: 'Super Administrator'
+  [USER_ROLES.SUPER_ADMIN]: 'Super Administrator',
+  [USER_ROLES.PENRO]: 'PENRO',
+  [USER_ROLES.CENRO]: 'CENRO'
 };
 
 export const APP_ROUTES = {
@@ -21,6 +25,7 @@ export const APP_ROUTES = {
   SELECTION: '/selection',
   DASHBOARD: '/dashboard',
   ADMIN_DASHBOARD: '/admin/dashboard',
+  PENRO_DASHBOARD: '/penro/dashboard',
   FORMS_LEAVE: '/forms/leave',
   FORMS_TRAVEL: '/forms/travel',
   SUCCESS: '/success',
@@ -35,6 +40,7 @@ export const APP_ROUTES = {
 
 export const REQUEST_STATUS = {
   PENDING: 'Pending',
+  PENDING_PENRO: 'Pending Approval PENRO',
   APPROVED: 'Approved',
   DECLINED: 'Declined',
   ARCHIVED: 'Archived'
@@ -53,6 +59,11 @@ export const STATUS_COLORS: Record<RequestStatus, { bg: string; text: string; bo
   [REQUEST_STATUS.PENDING]: {
     bg: 'bg-amber-100',
     text: 'text-amber-700',
+    border: 'border-amber-200'
+  },
+  [REQUEST_STATUS.PENDING_PENRO]: {
+    bg: 'bg-amber-100',
+    text: 'text-amber-800',
     border: 'border-amber-200'
   },
   [REQUEST_STATUS.APPROVED]: {
@@ -175,6 +186,16 @@ export const ROLE_PERMISSIONS: Record<UserRole, string[]> = {
     'submit_requests',
     'view_own_requests',
     'edit_own_requests'
+  ],
+  [USER_ROLES.PENRO]: [
+    'view_dashboard',
+    'approve_requests',
+    'decline_requests'
+  ],
+  [USER_ROLES.CENRO]: [
+    'view_dashboard',
+    'approve_requests',
+    'decline_requests'
   ],
   [USER_ROLES.SUPER_ADMIN]: [
     'view_dashboard',

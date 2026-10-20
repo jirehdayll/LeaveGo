@@ -5,7 +5,7 @@ import { REQUEST_TYPES } from '../constants';
  * Generates a PDF report for pending TRAVEL FORM applications
  * Format: Landscape, Times New Roman font, centered header, table with specific columns
  */
-export const generatePendingTravelPDF = async (pendingTravelForms) => {
+export const generatePendingTravelPDF = async (pendingTravelForms, department = '') => {
   const pdf = new jsPDF('l', 'mm', 'a4'); // landscape mode
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -14,13 +14,17 @@ export const generatePendingTravelPDF = async (pendingTravelForms) => {
   const margin = 15;
   const tableWidth = pageWidth - (margin * 2);
   
+  const reportTitle = department && department !== 'ALL'
+    ? `REPORTS OF TRAVEL FORM - ${department.toUpperCase()} - CENRO-OLONGAPO CITY`
+    : 'REPORTS OF TRAVEL FORM FROM CENRO-OLONGAPO CITY';
+
   // Set font to Times New Roman
   pdf.setFont('times');
   
   // Add header
-  pdf.setFontSize(16);
+  pdf.setFontSize(reportTitle.length > 50 ? 13 : 15);
   pdf.setFont('times', 'bold');
-  pdf.text('REPORTS OF TRAVEL FORM FROM CENRO-OLONGAPO CITY', pageWidth / 2, yPosition, { align: 'center' });
+  pdf.text(reportTitle, pageWidth / 2, yPosition, { align: 'center' });
   
   yPosition += 15;
   
@@ -75,9 +79,9 @@ export const generatePendingTravelPDF = async (pendingTravelForms) => {
       yPosition = 20;
       
       // Redraw header on new page
-      pdf.setFontSize(16);
+      pdf.setFontSize(reportTitle.length > 50 ? 13 : 15);
       pdf.setFont('times', 'bold');
-      pdf.text('REPORTS OF TRAVEL FORM FROM CENRO-OLONGAPO CITY', pageWidth / 2, yPosition, { align: 'center' });
+      pdf.text(reportTitle, pageWidth / 2, yPosition, { align: 'center' });
       yPosition += 15;
       
       pdf.setFontSize(11);
@@ -149,5 +153,8 @@ export const generatePendingTravelPDF = async (pendingTravelForms) => {
   });
   
   // Save the PDF
-  pdf.save(`Pending_Travel_Forms_${new Date().toISOString().split('T')[0]}.pdf`);
+  const filename = department && department !== 'ALL'
+    ? `Travel_Orders_${department.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+    : `Pending_Travel_Forms_${new Date().toISOString().split('T')[0]}.pdf`;
+  pdf.save(filename);
 };

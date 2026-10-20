@@ -99,6 +99,11 @@ function RequestCard({ request, onView, isRecent = false, isNewlyApproved = fals
               }`}>
                 {request.status}
               </span>
+              {isLeave && request.status === REQUEST_STATUS.PENDING && Boolean(request.penro_approved || request.details?.penro_approved) && (
+                <span className="px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold bg-teal-100 text-teal-800 border border-teal-200">
+                  PENRO Endorsed
+                </span>
+              )}
               {isNewlyApproved && (
                 <span className={`flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-bold ${
                   request.status === REQUEST_STATUS.APPROVED 

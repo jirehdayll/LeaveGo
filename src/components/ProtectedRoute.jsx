@@ -53,5 +53,42 @@ export function ProtectedRoute({ children, requireAdmin = false }) {
 }
 
 export function AdminRoute({ children }) {
+  const { user, loading, hasSession } = useAuth();
+  if (!loading && hasSession && user?.role === 'penro') {
+    return <Navigate to="/penro/dashboard" replace />;
+  }
   return <ProtectedRoute requireAdmin>{children}</ProtectedRoute>;
+}
+
+export function PenroRoute({ children }) {
+  const { user, loading, isActive, hasSession } = useAuth();
+  const location = useLocation();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600 mx-auto mb-4"></div>
+          <p className="text-slate-400 text-sm font-medium">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!user || !isActive || !hasSession) {
+    const redirectTo = `${location.pathname}${location.search}`;
+    return (
+      <Navigate 
+        to={`${APP_ROUTES.LOGIN}?redirectTo=${encodeURIComponent(redirectTo)}`} 
+        state={{ from: location.pathname }} 
+        replace 
+      />
+    );
+  }
+
+  if (user.role !== 'penro' && user.role !== 'admin' && user.role !== 'super_admin') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  return children;
 }

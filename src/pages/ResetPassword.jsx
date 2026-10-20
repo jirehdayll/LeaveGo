@@ -26,35 +26,57 @@ export default function ResetPassword() {
       setUserEmail(emailParam);
     }
 
-    // Check session explicitly on mount
+    // Handle PKCE code-based flow (Supabase v2 with PKCE enabled)
+    // When Supabase sends the reset email with a `code` query param
+    const code = searchParams.get('code');
+    if (code) {
+      supabase.auth.exchangeCodeForSession(code).then(({ data, error: codeErr }) => {
+        if (cancelled) return;
+        if (codeErr) {
+          setError('Recovery link is invalid or has expired. Please request a new password reset.');
+        } else if (data?.session) {
+          if (data.session.user?.email) setUserEmail(data.session.user.email);
+          setReady(true);
+        }
+      });
+    }
+
+    // Check session explicitly on mount (handles hash token already consumed by Supabase client)
     supabase.auth.getSession().then(({ data: { session }, error: sessionError }) => {
       if (cancelled) return;
-      if (sessionError) setError(sessionError.message);
-      else if (session) setReady(true);
+      if (sessionError) {
+        // Non-fatal — might just mean no current session yet
+        console.warn('[ResetPassword] getSession error:', sessionError.message);
+      } else if (session) {
+        if (session.user?.email) setUserEmail(session.user.email);
+        setReady(true);
+      }
     });
 
+    // Listen for PASSWORD_RECOVERY event — fired when Supabase processes the hash token
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (cancelled) return;
-      if (event === 'PASSWORD_RECOVERY' || session) setReady(true);
+      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
+        if (session?.user?.email) setUserEmail(session.user.email);
+        setReady(true);
+      }
     });
 
+    // After 3 seconds, show the form regardless so the user is never stuck
     const t = setTimeout(() => {
       if (cancelled) return;
-      
-      // Stop the loading spinner after 2.5 seconds regardless of session state
-      setReady((r) => {
-        if (!r) {
-          // If we still don't have a session, check if there's a specific URL error
-          if ((window.location.hash || '').includes('error')) {
-            setError('Recovery link error. Request a new reset from the login page.');
-          } else {
-            // Optional: You could show a generic error here if you want to strictly prevent 
-            // access without a session, e.g. setError('No active recovery session found.');
+      setReady(prev => {
+        if (!prev) {
+          const hash = window.location.hash || '';
+          const search = window.location.search || '';
+          if (hash.includes('error') || search.includes('error')) {
+            setError('Recovery link error or has expired. Please request a new reset from the login page.');
           }
+          // Show the form anyway so the user can try
         }
         return true;
       });
-    }, 2500);
+    }, 3000);
 
     return () => {
       cancelled = true;

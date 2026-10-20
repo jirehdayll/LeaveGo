@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import ConfirmationModal from '../components/ConfirmationModal';
+import TravelDepartmentModal from '../components/TravelDepartmentModal';
 import {
   getNextApplicationNumber,
   buildDetailsWithApplicationNumber,
@@ -59,6 +60,22 @@ function ViewRequestModal({ request, onClose, onApprove, onDecline, user }) {
             <div><p className="text-xs text-slate-400">Submitted</p><p className="text-sm font-semibold text-slate-800">{new Date(request.submitted_at || request.created_at).toLocaleDateString('en-PH')}</p></div>
             <div><p className="text-xs text-slate-400">Position</p><p className="text-sm font-semibold text-slate-800">{d.position || 'N/A'}</p></div>
             <div><p className="text-xs text-slate-400">Department</p><p className="text-sm font-semibold text-slate-800">{d.office_department || 'N/A'}</p></div>
+            {!isTravel && (
+              <div className="md:col-span-2 pt-2 border-t border-slate-200/60">
+                <p className="text-xs text-slate-400 mb-1">PENRO Approval Status</p>
+                {Boolean(request.penro_approved || d.penro_approved) ? (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                    PENRO Approved {d.penro_approved_by ? `(${d.penro_approved_by})` : ''}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                    <Clock className="w-3.5 h-3.5 text-amber-600" />
+                    Pending Approval PENRO
+                  </span>
+                )}
+              </div>
+            )}
           </div>
           
           {/* Request Details */}
@@ -90,13 +107,46 @@ function ViewRequestModal({ request, onClose, onApprove, onDecline, user }) {
         </div>
 
         {/* Modal Action Footer */}
-        <div className="px-7 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-end gap-3 flex-shrink-0">
-          <button
-            onClick={onClose}
-            className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-sm transition-all"
-          >
-            Close
-          </button>
+        <div className="px-7 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between gap-3 flex-shrink-0">
+          <div>
+            {!isTravel && !Boolean(request.penro_approved || d.penro_approved) && request.status === REQUEST_STATUS.PENDING && (
+              <p className="text-xs text-amber-700 font-medium flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" /> Awaiting PENRO endorsement before Admin approval
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="px-5 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold rounded-xl text-sm transition-all"
+            >
+              Close
+            </button>
+            {request.status === REQUEST_STATUS.PENDING && isAdmin && onDecline && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onDecline(request);
+                }}
+                className="px-4 py-2 bg-red-50 hover:bg-red-100 text-red-700 font-bold rounded-xl text-sm transition-all flex items-center gap-1.5"
+              >
+                <X className="w-4 h-4" /> Decline
+              </button>
+            )}
+            {request.status === REQUEST_STATUS.PENDING && isAdmin && onApprove && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onApprove(request);
+                }}
+                disabled={!isTravel && !Boolean(request.penro_approved || d.penro_approved)}
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed text-white font-bold rounded-xl text-sm transition-all flex items-center gap-1.5 shadow-sm"
+                title={!isTravel && !Boolean(request.penro_approved || d.penro_approved) ? 'Requires PENRO approval first' : 'Approve Request'}
+              >
+                <Check className="w-4 h-4" /> Approve
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -147,6 +197,10 @@ export default function AdminDashboard() {
   });
   const [actionLoading, setActionLoading] = useState(false);
   const [downloadingPending, setDownloadingPending] = useState(false);
+  const [travelDeptModal, setTravelDeptModal] = useState({
+    isOpen: false,
+    type: 'excel',
+  });
   
   const now = new Date();
   const monthName = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][now.getMonth()];
@@ -385,28 +439,44 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDownloadPendingTravel = async (type) => {
+  const handleOpenTravelModal = (type) => {
+    const pendingTravelForms = pending.filter(req => req.request_type === REQUEST_TYPES.TRAVEL);
+    if (pendingTravelForms.length === 0) {
+      showToast('No pending travel forms to download.', 'info');
+      return;
+    }
+    setTravelDeptModal({ isOpen: true, type });
+  };
+
+  const handleConfirmTravelDownload = async (department) => {
     try {
       setDownloadingPending(true);
-      
-      // Filter only pending travel forms
       const pendingTravelForms = pending.filter(req => req.request_type === REQUEST_TYPES.TRAVEL);
-      
-      if (pendingTravelForms.length === 0) {
-        alert('No pending travel forms to download.');
+
+      const filteredForms = department === 'ALL' || !department
+        ? pendingTravelForms
+        : pendingTravelForms.filter(req => {
+            const formDept = (req.details?.office_department || req.department || req.details?.department || '').trim().toLowerCase();
+            return formDept === department.trim().toLowerCase();
+          });
+
+      if (filteredForms.length === 0) {
+        showToast(`No pending travel orders found for department "${department}".`, 'warning');
         return;
       }
 
-      if (type === 'excel') {
+      if (travelDeptModal.type === 'excel') {
         const { generatePendingTravelExcel } = await import('../lib/pendingTravelGenerator');
-        await generatePendingTravelExcel(pendingTravelForms);
-      } else if (type === 'pdf') {
+        await generatePendingTravelExcel(filteredForms, department);
+      } else {
         const { generatePendingTravelPDF } = await import('../lib/pendingTravelPDF');
-        await generatePendingTravelPDF(pendingTravelForms);
+        await generatePendingTravelPDF(filteredForms, department);
       }
+      setTravelDeptModal(prev => ({ ...prev, isOpen: false }));
+      showToast(`Travel order summary (${department === 'ALL' ? 'All Departments' : department}) downloaded.`, 'success');
     } catch (error) {
       console.error('Error downloading pending travel forms:', error);
-      alert('Failed to download pending travel forms. Please try again.');
+      showToast('Failed to download pending travel forms. Please try again.', 'danger');
     } finally {
       setDownloadingPending(false);
     }
@@ -545,11 +615,11 @@ export default function AdminDashboard() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => handleDownloadPendingTravel('excel')}
+                onClick={() => handleOpenTravelModal('excel')}
                 disabled={downloadingPending}
                 className="flex items-center gap-2 px-3 py-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
-                {downloadingPending ? (
+                {downloadingPending && travelDeptModal.type === 'excel' ? (
                   <div className="w-4 h-4 border-2 border-emerald-600 border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <Download className="w-4 h-4" />
@@ -557,11 +627,11 @@ export default function AdminDashboard() {
                 Excel
               </button>
               <button
-                onClick={() => handleDownloadPendingTravel('pdf')}
+                onClick={() => handleOpenTravelModal('pdf')}
                 disabled={downloadingPending}
                 className="flex items-center gap-2 px-3 py-2 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
               >
-                {downloadingPending ? (
+                {downloadingPending && travelDeptModal.type === 'pdf' ? (
                   <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
                 ) : (
                   <Download className="w-4 h-4" />
@@ -633,8 +703,21 @@ export default function AdminDashboard() {
                       <td className="px-6 py-4 text-sm text-slate-500">
                         {new Date(req.submitted_at || req.created_at).toLocaleDateString('en-PH')}
                       </td>
-                      <td className="px-6 py-4 text-sm text-slate-600 max-w-[200px] truncate">
-                        {req.request_type === REQUEST_TYPES.TRAVEL ? (req.details?.destination || '-') : (req.details?.leave_type || '-')}
+                      <td className="px-6 py-4 text-sm text-slate-600 max-w-[220px]">
+                        <p className="truncate font-medium">{req.request_type === REQUEST_TYPES.TRAVEL ? (req.details?.destination || '-') : (req.details?.leave_type || '-')}</p>
+                        {req.request_type === REQUEST_TYPES.LEAVE && (
+                          <div className="mt-1">
+                            {Boolean(req.penro_approved || req.details?.penro_approved) ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                <CheckCircle2 className="w-2.5 h-2.5 text-emerald-600" /> PENRO Approved
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                <Clock className="w-2.5 h-2.5 text-amber-600" /> Pending Approval PENRO
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-2 mobile-action-buttons" onClick={(e) => e.stopPropagation()}>
@@ -648,13 +731,23 @@ export default function AdminDashboard() {
                           
                           {/* Show appropriate approval buttons based on user role and request status */}
                           {req.status === REQUEST_STATUS.PENDING && isAdmin && (
-                            <button
-                              onClick={() => handleApproveClick(req)}
-                              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition-all mobile-compact-btn"
-                              title="Approve"
-                            >
-                              <Check className="w-3.5 h-3.5" /> Approve
-                            </button>
+                            req.request_type === REQUEST_TYPES.LEAVE && !Boolean(req.penro_approved || req.details?.penro_approved) ? (
+                              <button
+                                disabled
+                                className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-400 text-xs font-semibold rounded-xl cursor-not-allowed opacity-75 mobile-compact-btn border border-slate-200"
+                                title="Pending Approval PENRO — PENRO must endorse this leave form before Admin can approve"
+                              >
+                                <Clock className="w-3.5 h-3.5 text-amber-500" /> Pending PENRO
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleApproveClick(req)}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 text-xs font-bold rounded-xl transition-all mobile-compact-btn"
+                                title="Approve"
+                              >
+                                <Check className="w-3.5 h-3.5" /> Approve
+                              </button>
+                            )
                           )}
                           
                           {req.status === REQUEST_STATUS.PENDING && isAdmin && (
@@ -697,6 +790,16 @@ export default function AdminDashboard() {
         type={confirmModal.type}
         isLoading={confirmModal.isLoading}
         showCommentInput={confirmModal.showCommentInput}
+      />
+
+      {/* Travel Order Department Selection Modal */}
+      <TravelDepartmentModal
+        isOpen={travelDeptModal.isOpen}
+        downloadType={travelDeptModal.type}
+        onClose={() => setTravelDeptModal(prev => ({ ...prev, isOpen: false }))}
+        pendingTravelForms={pending.filter(req => req.request_type === REQUEST_TYPES.TRAVEL)}
+        onConfirm={handleConfirmTravelDownload}
+        loading={downloadingPending}
       />
 
       {/* Toast Container */}

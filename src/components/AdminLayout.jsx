@@ -27,6 +27,14 @@ export default function AdminLayout({ children }) {
 
   const { user, loading: authLoading, logout } = useAuth();
   const adminEmail = user?.email || '—';
+  const isPenro = user?.role === 'penro';
+
+  const currentNavItems = isPenro
+    ? [{ label: 'Dashboard', path: '/penro/dashboard', icon: LayoutDashboard }]
+    : navItems;
+
+  const panelTitle = isPenro ? 'PENRO Panel' : 'Admin Panel';
+  const roleLabel = isPenro ? 'PENRO' : 'Administrator';
 
   if (authLoading) return null; // or a smaller spinner
 
@@ -44,14 +52,14 @@ export default function AdminLayout({ children }) {
         {!collapsed && (
           <div>
             <h1 className="text-white font-bold text-sm leading-tight">LeaveGo</h1>
-            <p className="text-emerald-300 text-xs">Admin Panel</p>
+            <p className="text-emerald-300 text-xs">{panelTitle}</p>
           </div>
         )}
       </div>
 
       {/* Navigation - Scrollable */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto min-h-0">
-        {navItems.map(({ label, path, icon: Icon, action }) => {
+        {currentNavItems.map(({ label, path, icon: Icon, action }) => {
           const active = location.pathname === path;
           return (
             <button
@@ -87,7 +95,7 @@ export default function AdminLayout({ children }) {
           <div className="px-3 py-3">
             <div className="px-3 py-3 rounded-xl bg-white/5 mb-3">
               <p className="text-xs text-emerald-300 font-medium truncate">{adminEmail}</p>
-              <p className="text-xs text-emerald-100/40 mt-1">Administrator</p>
+              <p className="text-xs text-emerald-100/40 mt-1">{roleLabel}</p>
             </div>
           </div>
         )}
@@ -132,14 +140,14 @@ export default function AdminLayout({ children }) {
           {!collapsed && (
             <div>
               <h1 className="text-white font-bold text-xs sm:text-sm leading-tight">LeaveGo</h1>
-              <p className="text-emerald-300 text-[10px] sm:text-xs">Admin Panel</p>
+              <p className="text-emerald-300 text-[10px] sm:text-xs">{panelTitle}</p>
             </div>
           )}
         </div>
 
         {/* Scrollable Navigation */}
         <nav className="flex-1 px-2 sm:px-3 py-3 sm:py-4 space-y-1 overflow-y-auto">
-          {navItems.map(({ label, path, icon: Icon, action }) => {
+          {currentNavItems.map(({ label, path, icon: Icon, action }) => {
             const active = location.pathname === path;
             return (
               <button
@@ -173,7 +181,7 @@ export default function AdminLayout({ children }) {
           {!collapsed && (
             <div className="px-2 sm:px-3 py-2 sm:py-3 rounded-lg sm:rounded-xl bg-white/5 mb-2 sm:mb-3">
               <p className="text-[10px] sm:text-xs text-emerald-300 font-medium truncate">{adminEmail}</p>
-              <p className="text-[9px] sm:text-xs text-emerald-100/40 mt-1">Administrator</p>
+              <p className="text-[9px] sm:text-xs text-emerald-100/40 mt-1">{roleLabel}</p>
             </div>
           )}
           <button
@@ -204,7 +212,7 @@ export default function AdminLayout({ children }) {
               <Menu className="w-5 h-5 sm:w-6 sm:h-6" />
             </button>
             <img src="/logo.png" alt="LeaveGo" className="w-6 h-6 sm:w-7 sm:h-7 object-contain" />
-            <span className="text-white font-bold text-sm sm:text-base">LeaveGo Admin</span>
+            <span className="text-white font-bold text-sm sm:text-base">{isPenro ? 'LeaveGo PENRO' : 'LeaveGo Admin'}</span>
           </div>
           <div className="flex items-center gap-2">
             <button

@@ -106,6 +106,8 @@ export default function Login() {
 
         if (from) {
           navigate(from, { replace: true });
+        } else if (result.user.role === 'penro') {
+          navigate('/penro/dashboard', { replace: true });
         } else if (result.user.role === 'admin' || result.user.role === 'cenro') {
           navigate('/admin/dashboard', { replace: true });
         } else {

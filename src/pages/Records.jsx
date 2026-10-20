@@ -88,7 +88,7 @@ function RecordsContent() {
       // Recalculate balances for every employee from the approved requests currently loaded.
       // This keeps Admin Records aligned with User Leave Balance.
       const employeeIds = userAccounts
-        ?.filter(a => a.role !== USER_ROLES.ADMIN && a.role !== USER_ROLES.SUPER_ADMIN)
+        ?.filter(a => a.role !== USER_ROLES.ADMIN && a.role !== USER_ROLES.SUPER_ADMIN && a.role !== USER_ROLES.PENRO && a.role !== 'penro' && a.role !== 'cenro')
         .map(a => a.id) || [];
 
       await Promise.all(
@@ -303,7 +303,10 @@ function RecordsContent() {
     !search || (a.full_name || a.fullName || a.name || '').toLowerCase().includes(search.toLowerCase()) || (a.email || a.denr_email || '').toLowerCase().includes(search.toLowerCase())
   ).filter(a => 
     a.role !== USER_ROLES.ADMIN && 
-    a.role !== USER_ROLES.SUPER_ADMIN
+    a.role !== USER_ROLES.SUPER_ADMIN &&
+    a.role !== USER_ROLES.PENRO &&
+    a.role !== 'penro' &&
+    a.role !== 'cenro'
   );
 
   // Apply additional filters

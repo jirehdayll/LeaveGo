@@ -6,7 +6,7 @@ import { saveAs } from 'file-saver';
  * Generates an Excel report for pending TRAVEL FORM applications
  * Format: Landscape, Times New Roman font, centered header, table with specific columns
  */
-export const generatePendingTravelExcel = async (pendingTravelForms) => {
+export const generatePendingTravelExcel = async (pendingTravelForms, department = '') => {
   const workbook = new ExcelJS.Workbook();
   const worksheet = workbook.addWorksheet('Pending Travel Forms');
 
@@ -30,7 +30,9 @@ export const generatePendingTravelExcel = async (pendingTravelForms) => {
   // Add header
   worksheet.mergeCells('A1:G1');
   const headerCell = worksheet.getCell('A1');
-  headerCell.value = 'REPORTS OF TRAVEL FORM FROM CENRO-OLONGAPO CITY';
+  headerCell.value = department && department !== 'ALL'
+    ? `REPORTS OF TRAVEL FORM - ${department.toUpperCase()} - CENRO-OLONGAPO CITY`
+    : 'REPORTS OF TRAVEL FORM FROM CENRO-OLONGAPO CITY';
   headerCell.font = { name: 'Times New Roman', size: 14, bold: true };
   headerCell.alignment = { horizontal: 'center', vertical: 'middle' };
   worksheet.getRow(1).height = 30;
@@ -86,5 +88,8 @@ export const generatePendingTravelExcel = async (pendingTravelForms) => {
   // Generate buffer and save
   const buffer = await workbook.xlsx.writeBuffer();
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-  saveAs(blob, `Pending_Travel_Forms_${new Date().toISOString().split('T')[0]}.xlsx`);
+  const filename = department && department !== 'ALL'
+    ? `Travel_Orders_${department.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx`
+    : `Pending_Travel_Forms_${new Date().toISOString().split('T')[0]}.xlsx`;
+  saveAs(blob, filename);
 };
